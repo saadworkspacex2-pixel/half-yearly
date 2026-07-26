@@ -25,6 +25,7 @@ interface StudentResult {
   mcqRank: number | null;
   subjects: SubjectResult[];
   gradedSubjectsCount: number;
+  totalSubjects: number;
   hasMarks: boolean;
   subjectRanks?: Record<string, number | null>;
 }
@@ -84,7 +85,7 @@ export default function LeaderboardPage() {
   const handleExport = () => {
     const header = "Rank,Name,Roll,Section,GPA,Grade,Graded Subjects";
     const rows = displayData.map((s) =>
-      `${getRank(s) || "-"},${s.name},${s.rollNumber},${s.section},${s.gpa.toFixed(2)},${s.overallGrade},${s.gradedSubjectsCount}/${SUBJECTS.length}`
+      `${getRank(s) || "-"},${s.name},${s.rollNumber},${s.section},${s.gpa.toFixed(2)},${s.overallGrade},${s.gradedSubjectsCount}/${s.totalSubjects || SUBJECTS.length}`
     );
     const csv = [header, ...rows].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
@@ -223,7 +224,7 @@ export default function LeaderboardPage() {
                         }}>{s.overallGrade}</span>
                       </td>
                       <td className="py-3 px-4 text-center">
-                        <span className="text-xs font-medium text-muted">{s.gradedSubjectsCount}/{SUBJECTS.length}</span>
+                        <span className="text-xs font-medium text-muted">{s.gradedSubjectsCount}/{s.totalSubjects || SUBJECTS.length}</span>
                       </td>
                       <td className="py-3 px-4 text-center">
                         <span className={`px-2.5 py-1 rounded-xl text-xs font-bold ${s.overallPass ? "bg-emerald/10 text-emerald" : "bg-crimson/10 text-crimson"}`}>{s.overallPass ? "PASS" : "FAIL"}</span>
