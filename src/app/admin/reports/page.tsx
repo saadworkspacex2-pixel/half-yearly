@@ -7,6 +7,7 @@ interface SubjectResult { subject: string; cq: number; mcq: number; total: numbe
 interface StudentResult {
   studentId: number; name: string; rollNumber: number; totalObtained: number; maxPossibleTotal: number;
   average: number; overallGrade: string; overallPass: boolean; rank: number | null; subjects: SubjectResult[]; hasMarks: boolean;
+  gpa: number; totalSubjects: number; gradedSubjectsCount: number;
 }
 interface Settings { schoolName: string; schoolLogo: string; principalName: string; classTeacherName: string; academicYear: string; }
 
@@ -29,9 +30,9 @@ export default function ReportsPage() {
   const student = results.find((r) => r.studentId === selectedStudent);
 
   const handleExportCSV = () => {
-    const header = "Roll,Name,Total,Average,Grade,Status";
+    const header = "Rank,Roll,Name,GPA,Total,Average,Grade,Status";
     const rows = results.filter((r) => r.hasMarks).sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999))
-      .map((s) => `${s.rollNumber},${s.name},${s.totalObtained}/${s.maxPossibleTotal},${s.average}%,${s.overallGrade},${s.overallPass ? "PASS" : "FAIL"}`);
+      .map((s) => `${s.rank || "-"},${s.rollNumber},${s.name},${s.gpa?.toFixed(2) || "0.00"},${s.totalObtained}/${s.maxPossibleTotal},${s.average}%,${s.overallGrade},${s.overallPass ? "PASS" : "FAIL"}`);
     const blob = new Blob([[header, ...rows].join("\n")], { type: "text/csv" });
     const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = `results-${examType}.csv`; a.click(); URL.revokeObjectURL(url);
   };
@@ -127,10 +128,24 @@ export default function ReportsPage() {
                 <td className="py-3 px-4 text-center text-sm">{student.totalObtained}/{student.maxPossibleTotal}</td>
                 <td className="py-3 px-4 text-center text-sm">{student.overallGrade}</td>
               </tr>
+              {student.gpa !== undefined && (
+                <tr className="bg-charcoal/90 text-white font-bold">
+                  <td className="py-2 px-4 text-sm">Grade Point Average (GPA)</td>
+                  <td className="py-2 px-4 text-center text-sm" colSpan={3}>
+                    {student.gpa.toFixed(2)} / 5.00
+                  </td>
+                  <td className="py-2 px-4 text-center text-sm">
+                    <span className={`px-2 py-0.5 rounded-lg text-xs font-bold ${student.gpa >= 5 ? "bg-emerald/30" : student.gpa >= 4 ? "bg-royal/30" : student.gpa >= 3 ? "bg-amber/30" : student.gpa >= 2 ? "bg-orange-500/30" : student.gpa > 0 ? "bg-crimson/30" : ""}`}>
+                      {student.gradedSubjectsCount || 0}/{student.totalSubjects || 7} subjects
+                    </span>
+                  </td>
+                </tr>
+              )}
             </tfoot>
           </table>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+            <div className="bg-gray-50 rounded-xl p-4 text-center"><p className="text-xs text-muted">GPA</p><p className="text-lg font-bold text-charcoal">{student.gpa?.toFixed(2) || "0.00"}</p></div>
             <div className="bg-gray-50 rounded-xl p-4 text-center"><p className="text-xs text-muted">Average</p><p className="text-lg font-bold text-charcoal">{student.average}%</p></div>
             <div className="bg-gray-50 rounded-xl p-4 text-center"><p className="text-xs text-muted">Grade</p><p className="text-lg font-bold" style={{ color: GRADE_COLORS[student.overallGrade] }}>{student.overallGrade}</p></div>
             <div className="bg-gray-50 rounded-xl p-4 text-center"><p className="text-xs text-muted">Rank</p><p className="text-lg font-bold text-royal">{student.rank ?? "—"}</p></div>
