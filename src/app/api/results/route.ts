@@ -4,6 +4,8 @@ import { students, marks, settings } from "@/db/schema";
 import { eq, asc } from "drizzle-orm";
 import {
   SUBJECTS,
+  COMBINED_SUBJECTS,
+  COMBINED_SUBJECT_MAP,
   calculateGrade,
   calculateRanks,
   calculateGPA,
@@ -33,7 +35,6 @@ export async function GET(req: NextRequest) {
       .from(marks)
       .where(eq(marks.examType, examType));
 
-    // For Half Yearly/Annual, also fetch monthly marks
     const monthly1Marks = !isMonthlyExam(examType) ? await db.select().from(marks).where(eq(marks.examType, "1st Monthly")) : [];
     const monthly2Marks = !isMonthlyExam(examType) ? await db.select().from(marks).where(eq(marks.examType, "2nd Monthly")) : [];
 
@@ -44,15 +45,12 @@ export async function GET(req: NextRequest) {
     const studentResults = allStudents.map((student) => {
       const studentMarks = allMarks.filter((m) => m.studentId === student.id);
       const hasAnyMarks = studentMarks.length > 0;
-      let totalObtained = 0;
-      let maxPossibleForStudent = 0;
-      let allPassing = true;
-      const subjectResults: Array<{
-        subject: string; cq: number; mcq: number; total: number; rawTotal: number;
-        maxTotal: number; grade: string; pass: boolean; monthlyMark: number; hasMark: boolean;
-        cqOnly: boolean; mcqOnly: boolean; bothEntered: boolean;
-      }> = [];
-      const grades: string[] = [];
+
+      // Step 1: Calculate individual paper results (detailed per paper)
+      const paperResults: Record<string, {
+        total: number; maxTotal: number; grade: string; pass: boolean;
+        hasMark: boolean; cq: number; mcq: number;
+      }> = {};
 
       for (const subj of SUBJECTS) {
         const config = getSubjectMaxForExam(subj, examType, customMarks);
@@ -62,20 +60,13 @@ export async function GET(req: NextRequest) {
         const hasMark = !!mark && (mark.cq !== 0 || mark.mcq !== 0 || mark.total !== 0);
 
         if (!hasMark) {
-          // Subject has NO marks — do NOT count toward GPA
-          subjectResults.push({
-            subject: subj, cq: 0, mcq: 0, total: 0, rawTotal: 0,
-            maxTotal: config.totalMax, grade: "N/A", pass: false,
-            monthlyMark: 0, hasMark: false, cqOnly: false, mcqOnly: false, bothEntered: false,
-          });
+          paperResults[subj] = { total: 0, maxTotal: config.totalMax, grade: "N/A", pass: false, hasMark: false, cq, mcq };
           continue;
         }
 
-        // Get scored marks based on what's actually entered (CQ only, MCQ only, or both)
         const scored = getScoredMarks(cq, mcq, config.cqMax, config.mcqMax, config.hasMcq);
 
         if (!isMonthlyExam(examType)) {
-          // Half Yearly / Annual
           const monthly1 = monthly1Marks.find((m) => m.studentId === student.id && m.subject === subj);
           const monthly2 = monthly2Marks.find((m) => m.studentId === student.id && m.subject === subj);
           const m1 = monthly1?.total ?? 0;
@@ -83,75 +74,93 @@ export async function GET(req: NextRequest) {
           const monthlyMark = (m1 + m2) / 2;
           const monthlyMax = DEFAULT_MONTHLY_FULL_MARKS[subj] || 20;
 
-          let finalTotal: number;
-          let effectiveMax: number;
-          let grade: string;
-          let usedMonthly = false;
+          let finalTotal: number, effectiveMax: number, grade: string;
 
           if (scored.bothEntered) {
-            // Both CQ+MCQ: scale to 80% + monthly average
-            usedMonthly = true;
-            const { finalTotal: ft } = calculateFinalTotal(
-              scored.scored, scored.maxScored, monthlyMark
-            );
+            const { finalTotal: ft } = calculateFinalTotal(scored.scored, scored.maxScored, monthlyMark);
             finalTotal = ft;
             effectiveMax = getEffectiveMaxTotal(scored.maxScored, monthlyMax);
             grade = calculateGrade(finalTotal, effectiveMax);
           } else if (scored.cqOnly) {
-            // Only CQ entered — use raw CQ marks as-is (no scaling, no monthly)
             finalTotal = cq;
             effectiveMax = config.cqMax;
             grade = calculateGrade(cq, config.cqMax, cq, config.cqMax, null);
           } else if (scored.mcqOnly) {
-            // Only MCQ entered — use raw MCQ marks as-is (no scaling, no monthly)
             finalTotal = mcq;
             effectiveMax = config.mcqMax;
             grade = calculateGrade(mcq, config.mcqMax);
           } else {
-            // Neither entered specifically, use whatever total exists
             finalTotal = scored.scored;
             effectiveMax = scored.maxScored;
             grade = calculateGrade(finalTotal, effectiveMax);
           }
 
           const pass = isPassing(finalTotal, effectiveMax);
-          if (!pass) allPassing = false;
-          totalObtained += finalTotal;
-          maxPossibleForStudent += effectiveMax;
-          grades.push(grade);
-
-          subjectResults.push({
-            subject: subj, cq, mcq, total: Math.round(finalTotal * 100) / 100,
-            rawTotal: scored.scored, maxTotal: Math.round(effectiveMax * 100) / 100,
-            grade, pass, monthlyMark: usedMonthly ? Math.round(monthlyMark * 100) / 100 : 0,
-            hasMark: true,
-            cqOnly: scored.cqOnly, mcqOnly: scored.mcqOnly, bothEntered: scored.bothEntered,
-          });
+          paperResults[subj] = { total: Math.round(finalTotal * 100) / 100, maxTotal: Math.round(effectiveMax * 100) / 100, grade, pass, hasMark: true, cq, mcq };
         } else {
-          // Monthly exam: just CQ (total mark)
           const total = cq;
-          let grade: string;
-          if (scored.cqOnly) {
-            grade = calculateGrade(cq, config.totalMax, cq, config.cqMax, null);
-          } else {
-            grade = calculateGrade(total, config.totalMax);
-          }
+          let grade = calculateGrade(total, config.totalMax);
           const pass = isPassing(total, config.totalMax);
-          if (!pass) allPassing = false;
-          totalObtained += total;
-          maxPossibleForStudent += config.totalMax;
-          grades.push(grade);
-
-          subjectResults.push({
-            subject: subj, cq, mcq, total, rawTotal: total,
-            maxTotal: config.totalMax, grade, pass, monthlyMark: 0,
-            hasMark: true,
-            cqOnly: scored.cqOnly, mcqOnly: scored.mcqOnly, bothEntered: scored.bothEntered,
-          });
+          paperResults[subj] = { total, maxTotal: config.totalMax, grade, pass, hasMark: true, cq, mcq };
         }
       }
 
-      // GPA is calculated ONLY from subjects that have marks
+      // Step 2: Combine into GPA subjects (Bangla = Bangla 1st + Bangla 2nd, etc.)
+      let totalObtained = 0;
+      let maxPossibleForStudent = 0;
+      let allPassing = true;
+      const combinedResults: Array<{
+        name: string; total: number; maxTotal: number; grade: string; pass: boolean;
+        hasMark: boolean; papers: string[];
+      }> = [];
+      const grades: string[] = [];
+
+      for (const combined of COMBINED_SUBJECTS) {
+        const papers = COMBINED_SUBJECT_MAP[combined];
+        let combinedTotal = 0;
+        let combinedMax = 0;
+        let anyHasMark = false;
+        let allPass = true;
+
+        for (const paper of papers) {
+          const pr = paperResults[paper];
+          if (pr?.hasMark) {
+            anyHasMark = true;
+            combinedTotal += pr.total;
+            combinedMax += pr.maxTotal;
+            if (!pr.pass) allPass = false;
+          }
+        }
+
+        if (!anyHasMark) {
+          combinedResults.push({ name: combined, total: 0, maxTotal: combinedMax || 100, grade: "N/A", pass: false, hasMark: false, papers });
+          continue;
+        }
+
+        const grade = calculateGrade(combinedTotal, combinedMax);
+        if (!allPass) allPassing = false;
+        totalObtained += combinedTotal;
+        maxPossibleForStudent += combinedMax;
+        grades.push(grade);
+
+        combinedResults.push({
+          name: combined, total: Math.round(combinedTotal * 100) / 100,
+          maxTotal: Math.round(combinedMax * 100) / 100,
+          grade, pass: allPass, hasMark: true, papers,
+        });
+      }
+
+      // Step 3: Compute per-paper subject results for the response
+      const subjectResults = SUBJECTS.map((subj) => {
+        const pr = paperResults[subj] || { total: 0, maxTotal: 0, grade: "N/A", pass: false, hasMark: false, cq: 0, mcq: 0 };
+        const config = getSubjectMaxForExam(subj, examType, customMarks);
+        return {
+          subject: subj, cq: pr.cq, mcq: pr.mcq,
+          total: pr.total, maxTotal: pr.maxTotal || config.totalMax,
+          grade: pr.grade, pass: pr.pass, hasMark: pr.hasMark,
+        };
+      });
+
       const gpa = grades.length > 0 ? calculateGPA(grades) : 0;
       const average = maxPossibleForStudent > 0 ? (totalObtained / maxPossibleForStudent) * 100 : 0;
       const overallGrade = grades.length > 0 ? calculateGrade(totalObtained, maxPossibleForStudent) : "N/A";
@@ -169,8 +178,10 @@ export async function GET(req: NextRequest) {
         overallGrade,
         gpa,
         overallPass: hasAnyMarks ? allPassing : false,
+        combinedSubjects: combinedResults,
         subjects: subjectResults,
         gradedSubjectsCount: grades.length,
+        totalSubjects: COMBINED_SUBJECTS.length,
         hasMarks: hasAnyMarks,
       };
     });
@@ -182,7 +193,7 @@ export async function GET(req: NextRequest) {
       withMarks.map((s) => ({ id: s.studentId, total: s.gpa }))
     );
 
-    // Subject rankings
+    // Subject rankings for individual papers
     const subjectRanks: Record<string, Map<number, number>> = {};
     for (const subj of SUBJECTS) {
       const subjectScores = withMarks
@@ -244,13 +255,13 @@ export async function GET(req: NextRequest) {
         D: withMarks.filter((s) => s.overallGrade === "D").length,
         F: withMarks.filter((s) => s.overallGrade === "F").length,
       },
-      subjectAverages: SUBJECTS.map((subj) => {
+      subjectAverages: COMBINED_SUBJECTS.map((subj) => {
         const vals = withMarks
-          .map((s) => s.subjects.find((x) => x.subject === subj && x.hasMark)?.total)
+          .map((s) => s.combinedSubjects?.find((x: { name: string; hasMark: boolean; total: number }) => x.name === subj && x.hasMark)?.total)
           .filter((v): v is number => v !== undefined && v !== null);
         const maxVal = withMarks.length > 0
-          ? (withMarks[0].subjects.find((x) => x.subject === subj)?.maxTotal ?? 100)
-          : 100;
+          ? (withMarks[0].combinedSubjects?.find((x: { name: string }) => x.name === subj)?.maxTotal ?? 150)
+          : 150;
         return {
           subject: subj,
           average: vals.length > 0
