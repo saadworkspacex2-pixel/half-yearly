@@ -52,6 +52,30 @@ export const SUBJECT_CONFIGS: Record<string, SubjectConfig> = {
   ICT: { name: "ICT", cqMax: 10, mcqMax: 15, totalMax: 25, hasMcq: true },
 };
 
+// Combined subjects for GPA calculation (Bangla = Bangla 1st + Bangla 2nd, etc.)
+export const COMBINED_SUBJECTS = [
+  "Bangla",
+  "English",
+  "Mathematics",
+  "BGS",
+  "Science",
+  "Islam",
+  "ICT",
+] as const;
+
+export type CombinedSubjectName = (typeof COMBINED_SUBJECTS)[number];
+
+// Maps each combined subject to its constituent individual papers
+export const COMBINED_SUBJECT_MAP: Record<string, string[]> = {
+  "Bangla": ["Bangla 1st", "Bangla 2nd"],
+  "English": ["English 1st", "English 2nd"],
+  "Mathematics": ["Mathematics"],
+  "BGS": ["BGS"],
+  "Science": ["Science"],
+  "Islam": ["Islam"],
+  "ICT": ["ICT"],
+};
+
 export const EXAM_TYPES = [
   "1st Monthly",
   "2nd Monthly",
