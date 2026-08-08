@@ -27,8 +27,19 @@ function HomeContent() {
 
       <DynamicIsland />
 
-      {/* Apple Hero Header */}
-      <header className="relative pt-6 pb-16 md:pb-20 overflow-hidden border-b border-white/10">
+      {/* Apple Hero Header with Class Photo Background & Black Offset */}
+      <header className="relative pt-6 pb-16 md:pb-24 overflow-hidden border-b border-white/10">
+        {/* Class Photo Background with Black Translucent Offset */}
+        <div className="absolute inset-0 -z-10 overflow-hidden pointer-events-none">
+          <img
+            src="/class-photo.jpg"
+            alt="Class Photo"
+            className="w-full h-full object-cover object-center opacity-45 scale-105 transition-transform duration-1000"
+          />
+          {/* Black Translucent Offset Overlay */}
+          <div className="absolute inset-0 bg-gradient-to-b from-black/85 via-black/75 to-[#000000]" />
+          <div className="absolute inset-0 backdrop-blur-[2px]" />
+        </div>
         <div className="max-w-7xl mx-auto px-4 md:px-6">
           {/* Top Navigation */}
           <div className="flex items-center justify-between gap-4 py-2">

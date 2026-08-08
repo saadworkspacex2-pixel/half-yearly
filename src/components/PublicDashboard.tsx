@@ -465,185 +465,215 @@ export default function PublicDashboard() {
               </div>
             </div>
 
-            {/* PODIUM VIEW */}
+            {/* PODIUM VIEW WITH 3D BLOCK PEDESTALS */}
             {viewMode === "podium" ? (
-              <div className="space-y-10">
-                {/* OLYMPIC TOP 3 PODIUM PEDESTALS */}
+              <div className="space-y-6">
+                {/* 3D EMBOSSED PODIUM PEDESTALS */}
                 {filtered.length > 0 && (
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 items-end pt-6">
-                    {/* 2nd Place Pedestal (Left) */}
-                    {top2 ? (
-                      <motion.div
-                        whileHover={{ y: -6 }}
-                        onClick={() => { setDetailStudent(top2); playOpen(); }}
-                        className="podium-silver rounded-3xl p-6 cursor-pointer relative overflow-hidden order-2 md:order-1 flex flex-col justify-between min-h-[300px]"
-                      >
-                        <div className="flex flex-col items-center text-center">
-                          <span className="text-2xl mb-1">🥈</span>
-                          <div className="relative mb-3">
-                            {top2.profilePicture ? (
-                              <img src={top2.profilePicture} alt={top2.name} className="w-20 h-20 rounded-full object-cover ring-4 ring-slate-300 shadow-xl" />
-                            ) : (
-                              <div className="w-20 h-20 rounded-full bg-slate-700 text-white flex items-center justify-center text-2xl font-black ring-4 ring-slate-300 shadow-xl">
-                                {top2.name.charAt(0)}
-                              </div>
-                            )}
-                            <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full text-[10px] font-black bg-slate-300 text-black shadow-md">
-                              2ND RANK
+                  <div className="relative pt-12 pb-4 px-2 bg-gradient-to-b from-[#161617]/40 via-[#161617] to-[#0d0d0e] rounded-3xl border border-white/10 shadow-2xl overflow-hidden">
+                    {/* Ambient Glow behind #1 */}
+                    <div className="absolute top-4 left-1/2 -translate-x-1/2 w-48 h-48 bg-amber-500/15 rounded-full blur-3xl pointer-events-none" />
+
+                    <div className="flex items-end justify-center max-w-2xl mx-auto gap-2 md:gap-4 relative z-10 px-2">
+                      {/* RANK 2 PEDESTAL BLOCK (LEFT) */}
+                      {top2 ? (
+                        <div
+                          onClick={() => { setDetailStudent(top2); playOpen(); }}
+                          className="flex-1 flex flex-col items-center cursor-pointer group"
+                        >
+                          {/* Floating Avatar & Score Pill */}
+                          <motion.div whileHover={{ y: -6 }} className="flex flex-col items-center mb-3">
+                            <div className="relative">
+                              {top2.profilePicture ? (
+                                <img
+                                  src={top2.profilePicture}
+                                  alt={top2.name}
+                                  className="w-16 h-16 sm:w-20 sm:h-20 rounded-full object-cover ring-4 ring-slate-300 shadow-2xl"
+                                />
+                              ) : (
+                                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-slate-700 text-white flex items-center justify-center text-xl sm:text-2xl font-black ring-4 ring-slate-300 shadow-2xl">
+                                  {top2.name.charAt(0)}
+                                </div>
+                              )}
+                              <span className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-slate-300 text-black font-black text-[11px] flex items-center justify-center shadow-lg ring-2 ring-black">
+                                2
+                              </span>
+                            </div>
+
+                            <p className="text-xs sm:text-sm font-bold text-white mt-2 truncate max-w-[100px] sm:max-w-[120px] text-center">
+                              {top2.name}
+                            </p>
+
+                            <div className="mt-1 px-3 py-1 rounded-full bg-[#242426] border border-white/10 text-[11px] font-bold text-slate-300 flex items-center gap-1.5 shadow-md">
+                              <span>🏆</span> {top2.totalObtained} pts
+                            </div>
+                          </motion.div>
+
+                          {/* 3D Block Pedestal #2 */}
+                          <div className="w-full h-36 sm:h-44 bg-gradient-to-b from-[#2a2b2e] via-[#1c1d1f] to-[#141415] rounded-t-2xl border-t-2 border-slate-400/50 flex flex-col items-center justify-center relative shadow-[inset_0_2px_10px_rgba(255,255,255,0.1)] group-hover:from-[#323338] transition-colors">
+                            <span className="text-5xl sm:text-7xl font-black text-slate-500/30 select-none tracking-tighter drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
+                              2
+                            </span>
+                            <span className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-widest -mt-2">
+                              2ND PLACE
                             </span>
                           </div>
-                          <h4 className="text-base font-bold text-white truncate max-w-full mt-2">{top2.name}</h4>
-                          <p className="text-xs text-[#86868b] mb-4">Roll: {top2.rollNumber}</p>
                         </div>
+                      ) : null}
 
-                        <div className="w-full liquid-glass-sm p-3 rounded-2xl text-center space-y-1 border border-white/10">
-                          <div className="flex justify-between items-center text-xs">
-                            <span className="text-[#86868b]">{lang === "bn" ? "নম্বর" : "Score"}</span>
-                            <span className="font-extrabold text-white">{top2.totalObtained} pts</span>
-                          </div>
-                          <div className="flex justify-between items-center text-xs">
-                            <span className="text-[#86868b]">GPA</span>
-                            <span className="font-black text-blue-400 font-mono">{top2.gpa.toFixed(2)}</span>
-                          </div>
-                        </div>
-                      </motion.div>
-                    ) : null}
+                      {/* RANK 1 PEDESTAL BLOCK (CENTER - TALLEST) */}
+                      {top1 ? (
+                        <div
+                          onClick={() => { setDetailStudent(top1); playOpen(); }}
+                          className="flex-1 flex flex-col items-center cursor-pointer group z-20"
+                        >
+                          {/* Floating Crown, Avatar & Score Pill */}
+                          <motion.div whileHover={{ y: -8 }} className="flex flex-col items-center mb-3">
+                            <span className="text-3xl sm:text-4xl mb-1 animate-bounce">👑</span>
+                            <div className="relative">
+                              {top1.profilePicture ? (
+                                <img
+                                  src={top1.profilePicture}
+                                  alt={top1.name}
+                                  className="w-20 h-20 sm:w-24 sm:h-24 rounded-full object-cover ring-4 ring-amber-400 shadow-[0_0_25px_rgba(245,158,11,0.5)]"
+                                />
+                              ) : (
+                                <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-black flex items-center justify-center text-2xl sm:text-3xl font-black ring-4 ring-amber-400 shadow-[0_0_25px_rgba(245,158,11,0.5)]">
+                                  {top1.name.charAt(0)}
+                                </div>
+                              )}
+                              <span className="absolute -top-1 -right-1 w-7 h-7 rounded-full bg-amber-400 text-black font-black text-xs flex items-center justify-center shadow-xl ring-2 ring-black">
+                                1
+                              </span>
+                            </div>
 
-                    {/* 1st Place Pedestal (Center - Highest) */}
-                    {top1 ? (
-                      <motion.div
-                        whileHover={{ y: -8 }}
-                        onClick={() => { setDetailStudent(top1); playOpen(); }}
-                        className="podium-gold rounded-3xl p-7 cursor-pointer relative overflow-hidden order-1 md:order-2 flex flex-col justify-between min-h-[360px] border-2 border-amber-500/60 shadow-2xl"
-                      >
-                        <div className="absolute top-0 right-0 w-28 h-28 bg-amber-500/20 rounded-full blur-3xl pointer-events-none" />
-                        <div className="flex flex-col items-center text-center">
-                          <span className="text-4xl mb-1 animate-bounce">👑</span>
-                          <div className="relative mb-3">
-                            {top1.profilePicture ? (
-                              <img src={top1.profilePicture} alt={top1.name} className="w-24 h-24 rounded-full object-cover ring-4 ring-amber-400 shadow-2xl" />
-                            ) : (
-                              <div className="w-24 h-24 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-black flex items-center justify-center text-3xl font-black ring-4 ring-amber-400 shadow-2xl">
-                                {top1.name.charAt(0)}
-                              </div>
-                            )}
-                            <span className="absolute -bottom-2.5 left-1/2 -translate-x-1/2 px-3.5 py-0.5 rounded-full text-[10px] font-black bg-amber-400 text-black shadow-xl uppercase tracking-wider">
-                              1ST CHAMPION
+                            <p className="text-sm sm:text-base font-black text-white mt-2 truncate max-w-[110px] sm:max-w-[140px] text-center">
+                              {top1.name}
+                            </p>
+
+                            <div className="mt-1 px-3.5 py-1 rounded-full bg-amber-500/20 border border-amber-500/40 text-xs font-black text-amber-400 flex items-center gap-1.5 shadow-lg">
+                              <span>👑</span> {top1.totalObtained} pts
+                            </div>
+                          </motion.div>
+
+                          {/* 3D Block Pedestal #1 */}
+                          <div className="w-full h-48 sm:h-56 bg-gradient-to-b from-[#3a3528] via-[#242017] to-[#14120e] rounded-t-2xl border-t-4 border-amber-400 flex flex-col items-center justify-center relative shadow-[inset_0_2px_15px_rgba(245,158,11,0.2)] group-hover:from-[#453e2e] transition-colors">
+                            <span className="text-6xl sm:text-8xl font-black text-amber-500/30 select-none tracking-tighter drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)]">
+                              1
+                            </span>
+                            <span className="text-xs sm:text-sm font-black text-amber-400 uppercase tracking-widest -mt-3">
+                              CHAMPION
                             </span>
                           </div>
-                          <h4 className="text-lg font-black text-white truncate max-w-full mt-3">{top1.name}</h4>
-                          <p className="text-xs text-amber-300 font-bold mb-4">Roll: {top1.rollNumber}</p>
                         </div>
+                      ) : null}
 
-                        <div className="w-full liquid-glass-sm p-3.5 rounded-2xl text-center space-y-1.5 border border-amber-500/40 bg-black/40">
-                          <div className="flex justify-between items-center text-xs">
-                            <span className="text-amber-200/70 font-semibold">{lang === "bn" ? "প্রাপ্ত নম্বর" : "Total Obtained"}</span>
-                            <span className="font-black text-amber-400 text-sm">{top1.totalObtained} pts</span>
-                          </div>
-                          <div className="flex justify-between items-center text-xs">
-                            <span className="text-amber-200/70 font-semibold">GPA</span>
-                            <span className="font-black text-white font-mono text-sm">{top1.gpa.toFixed(2)}</span>
-                          </div>
-                        </div>
-                      </motion.div>
-                    ) : null}
+                      {/* RANK 3 PEDESTAL BLOCK (RIGHT) */}
+                      {top3 ? (
+                        <div
+                          onClick={() => { setDetailStudent(top3); playOpen(); }}
+                          className="flex-1 flex flex-col items-center cursor-pointer group"
+                        >
+                          {/* Floating Avatar & Score Pill */}
+                          <motion.div whileHover={{ y: -6 }} className="flex flex-col items-center mb-3">
+                            <div className="relative">
+                              {top3.profilePicture ? (
+                                <img
+                                  src={top3.profilePicture}
+                                  alt={top3.name}
+                                  className="w-16 h-16 sm:w-20 sm:h-20 rounded-full object-cover ring-4 ring-amber-700 shadow-2xl"
+                                />
+                              ) : (
+                                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-amber-900 text-amber-200 flex items-center justify-center text-xl sm:text-2xl font-black ring-4 ring-amber-700 shadow-2xl">
+                                  {top3.name.charAt(0)}
+                                </div>
+                              )}
+                              <span className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-amber-700 text-white font-black text-[11px] flex items-center justify-center shadow-lg ring-2 ring-black">
+                                3
+                              </span>
+                            </div>
 
-                    {/* 3rd Place Pedestal (Right) */}
-                    {top3 ? (
-                      <motion.div
-                        whileHover={{ y: -6 }}
-                        onClick={() => { setDetailStudent(top3); playOpen(); }}
-                        className="podium-bronze rounded-3xl p-6 cursor-pointer relative overflow-hidden order-3 flex flex-col justify-between min-h-[280px]"
-                      >
-                        <div className="flex flex-col items-center text-center">
-                          <span className="text-2xl mb-1">🥉</span>
-                          <div className="relative mb-3">
-                            {top3.profilePicture ? (
-                              <img src={top3.profilePicture} alt={top3.name} className="w-20 h-20 rounded-full object-cover ring-4 ring-amber-700 shadow-xl" />
-                            ) : (
-                              <div className="w-20 h-20 rounded-full bg-amber-900 text-amber-200 flex items-center justify-center text-2xl font-black ring-4 ring-amber-700 shadow-xl">
-                                {top3.name.charAt(0)}
-                              </div>
-                            )}
-                            <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full text-[10px] font-black bg-amber-700 text-white shadow-md">
-                              3RD RANK
+                            <p className="text-xs sm:text-sm font-bold text-white mt-2 truncate max-w-[100px] sm:max-w-[120px] text-center">
+                              {top3.name}
+                            </p>
+
+                            <div className="mt-1 px-3 py-1 rounded-full bg-[#242426] border border-white/10 text-[11px] font-bold text-slate-300 flex items-center gap-1.5 shadow-md">
+                              <span>🏆</span> {top3.totalObtained} pts
+                            </div>
+                          </motion.div>
+
+                          {/* 3D Block Pedestal #3 */}
+                          <div className="w-full h-28 sm:h-36 bg-gradient-to-b from-[#2c221c] via-[#1e1713] to-[#120e0b] rounded-t-2xl border-t-2 border-amber-700/50 flex flex-col items-center justify-center relative shadow-[inset_0_2px_10px_rgba(255,255,255,0.08)] group-hover:from-[#352922] transition-colors">
+                            <span className="text-4xl sm:text-6xl font-black text-amber-700/30 select-none tracking-tighter drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
+                              3
+                            </span>
+                            <span className="text-[10px] sm:text-xs font-bold text-amber-600 uppercase tracking-widest -mt-1">
+                              3RD PLACE
                             </span>
                           </div>
-                          <h4 className="text-base font-bold text-white truncate max-w-full mt-2">{top3.name}</h4>
-                          <p className="text-xs text-[#86868b] mb-4">Roll: {top3.rollNumber}</p>
                         </div>
-
-                        <div className="w-full liquid-glass-sm p-3 rounded-2xl text-center space-y-1 border border-white/10">
-                          <div className="flex justify-between items-center text-xs">
-                            <span className="text-[#86868b]">{lang === "bn" ? "নম্বর" : "Score"}</span>
-                            <span className="font-extrabold text-white">{top3.totalObtained} pts</span>
-                          </div>
-                          <div className="flex justify-between items-center text-xs">
-                            <span className="text-[#86868b]">GPA</span>
-                            <span className="font-black text-blue-400 font-mono">{top3.gpa.toFixed(2)}</span>
-                          </div>
-                        </div>
-                      </motion.div>
-                    ) : null}
+                      ) : null}
+                    </div>
                   </div>
                 )}
 
-                {/* REST OF PODIUM RANKERS (Ranks 4 to N) */}
+                {/* REST OF LEADERBOARD LIST (RANKS #4+) — CONNECTED BOTTOM PANEL */}
                 {restRankers.length > 0 && (
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-2 border-t border-white/10 pt-6">
-                      <span className="text-sm font-bold text-[#86868b] uppercase tracking-wider">
-                        {lang === "bn" ? "পরবর্তী পোডিয়াম স্থানসমূহ" : "Honorable Podium Rankers (Rank #4+)"}
-                      </span>
-                    </div>
+                  <div className="bg-[#161617] rounded-3xl p-4 sm:p-6 border border-white/10 shadow-2xl space-y-2">
+                    <h4 className="text-xs font-bold text-[#86868b] uppercase tracking-wider px-2 mb-3">
+                      {lang === "bn" ? "পরবর্তী মেধা তালিকা (রোল ৪+)" : "Class Rankers (#4 & Below)"}
+                    </h4>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="divide-y divide-white/5">
                       {restRankers.map((item, idx) => {
                         const rankNum = idx + 4;
                         const tier = getTier(item.gpa);
                         return (
                           <motion.div
                             key={item.studentId}
-                            whileHover={{ y: -3 }}
+                            whileHover={{ x: 4, backgroundColor: "rgba(255,255,255,0.04)" }}
                             onClick={() => { setDetailStudent(item); playOpen(); }}
-                            className="liquid-glass-sm p-4 rounded-2xl border border-white/10 hover:border-blue-500/40 cursor-pointer space-y-3 transition-all relative overflow-hidden"
+                            className="flex items-center justify-between p-3 sm:p-4 rounded-2xl cursor-pointer transition-all gap-3"
                           >
-                            <div className="flex items-center justify-between">
-                              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-blue-600/20 text-blue-400 border border-blue-500/30">
-                                Rank #{rankNum}
+                            {/* Left Rank & Student Info */}
+                            <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                              <span className="text-sm sm:text-base font-black text-[#86868b] w-6 text-center">
+                                {rankNum}
                               </span>
-                              <span className={`px-2 py-0.5 rounded text-[10px] font-black tier-${tier.toLowerCase()}`}>
-                                Tier {tier}
-                              </span>
-                            </div>
 
-                            <div className="flex items-center gap-3">
                               {item.profilePicture ? (
-                                <img src={item.profilePicture} alt={item.name} className="w-12 h-12 rounded-2xl object-cover ring-2 ring-white/10" />
+                                <img
+                                  src={item.profilePicture}
+                                  alt={item.name}
+                                  className="w-10 h-10 sm:w-11 sm:h-11 rounded-full object-cover ring-2 ring-white/10 flex-shrink-0"
+                                />
                               ) : (
-                                <div className="w-12 h-12 rounded-2xl bg-[#242426] text-white flex items-center justify-center font-bold text-lg">
+                                <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-[#242426] text-white flex items-center justify-center font-bold text-sm flex-shrink-0">
                                   {item.name.charAt(0)}
                                 </div>
                               )}
-                              <div className="min-w-0 flex-1">
-                                <h4 className="text-sm font-bold text-white truncate">{item.name}</h4>
-                                <p className="text-xs text-[#86868b]">Roll: {item.rollNumber}</p>
+
+                              <div className="min-w-0">
+                                <p className="text-xs sm:text-sm font-bold text-white truncate">{item.name}</p>
+                                <p className="text-[10px] sm:text-xs text-[#86868b]">
+                                  Roll: {item.rollNumber} • ID: {item.studentId}
+                                </p>
                               </div>
                             </div>
 
-                            <div className="grid grid-cols-3 gap-1 pt-2 border-t border-white/5 text-center text-xs">
-                              <div>
-                                <span className="text-[9px] text-[#86868b] block">CQ</span>
-                                <span className="font-bold text-slate-300">{item.totalCq}</span>
-                              </div>
-                              <div>
-                                <span className="text-[9px] text-[#86868b] block">MCQ</span>
-                                <span className="font-bold text-slate-300">{item.totalMcq}</span>
-                              </div>
-                              <div>
-                                <span className="text-[9px] text-[#86868b] block">GPA</span>
-                                <span className="font-black text-blue-400">{item.gpa.toFixed(2)}</span>
-                              </div>
+                            {/* Right Metric Pills */}
+                            <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+                              <span className="px-3 py-1 rounded-full text-xs font-bold bg-[#242426] text-slate-200 border border-white/10 font-mono">
+                                {item.totalObtained} pts
+                              </span>
+
+                              <span className="px-2.5 py-1 rounded-full text-xs font-black text-blue-400 bg-blue-500/10 border border-blue-500/20 font-mono hidden sm:inline-block">
+                                GPA {item.gpa.toFixed(2)}
+                              </span>
+
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-black tier-${tier.toLowerCase()}`}>
+                                {tier}
+                              </span>
                             </div>
                           </motion.div>
                         );
