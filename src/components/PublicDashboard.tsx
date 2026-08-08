@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { EXAM_TYPES, SUBJECTS, GRADE_COLORS } from "@/lib/constants";
-import { motion } from "framer-motion";
 import { GalleryShowcase, WeeklyRoutineTable } from "@/components/BentoWidgets";
 import { StudyMaterials, UpcomingEvents, MarkFinder } from "@/components/StudentWidgets";
+import DashboardCharts from "@/components/DashboardCharts";
+import StudentDetailModal from "@/components/StudentDetailModal";
 import { useI18n } from "@/lib/i18n";
 import { playClick, playOpen } from "@/lib/sounds";
 
@@ -61,6 +63,7 @@ interface Teacher {
 }
 
 interface Settings {
+  schoolName: string;
   classTeacherName: string;
   classTeacherDegree: string;
   classTeacherPicture: string;
@@ -85,7 +88,7 @@ interface StudentInfo {
   mobileNumber: string;
 }
 
-type LeaderboardType = "overall" | "cq" | "mcq";
+type LeaderboardType = "overall" | "cq" | "mcq" | "attendance";
 
 interface AttendanceLeaderboardEntry {
   studentId: number;
@@ -102,28 +105,23 @@ interface AttendanceLeaderboardEntry {
 
 export default function PublicDashboard() {
   const { t, lang, tSubject, tExam } = useI18n();
-  const [examType, setExamType] = useState<string>("");
 
-  // Only start loading results once examType is confirmed (from settings or default)
+  const [examType, setExamType] = useState<string>("");
   const [examReady, setExamReady] = useState(false);
   const [results, setResults] = useState<StudentResult[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
+
   const [leaderboardType, setLeaderboardType] = useState<LeaderboardType>("overall");
-  const [attendanceLeaderboard, setAttendanceLeaderboard] = useState<AttendanceLeaderboardEntry[]>([]);
-  const [attendanceLoading, setAttendanceLoading] = useState(true);
+  const [viewMode, setViewMode] = useState<"table" | "grid">("table");
   const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+
+  const [attendanceLeaderboard, setAttendanceLeaderboard] = useState<AttendanceLeaderboardEntry[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [allStudents, setAllStudents] = useState<StudentInfo[]>([]);
-  const [viewingStudentInfo, setViewingStudentInfo] = useState<StudentInfo | null>(null);
-  const [showApplyForm, setShowApplyForm] = useState(false);
-  const [applyForm, setApplyForm] = useState({
-    name: "", rollNumber: "", studentId: "", fatherName: "", motherName: "", mobileNumber: ""
-  });
-  const [submitting, setSubmitting] = useState(false);
-  const [submitSuccess, setSubmitSuccess] = useState(false);
+
   const [detailStudent, setDetailStudent] = useState<StudentResult | null>(null);
 
   useEffect(() => {
@@ -132,7 +130,6 @@ export default function PublicDashboard() {
       .then((d) => setAllStudents(Array.isArray(d) ? d : []))
       .catch(() => {});
 
-    // Fetch settings FIRST, then set examType and mark ready
     fetch("/api/settings")
       .then((r) => r.json())
       .then((d) => {
@@ -142,10 +139,10 @@ export default function PublicDashboard() {
         setExamReady(true);
       })
       .catch(() => {
-        // Fallback to default if settings fail
         setExamType("Half Yearly");
         setExamReady(true);
       });
+
     fetch("/api/teachers")
       .then((r) => r.json())
       .then((d) => setTeachers(Array.isArray(d) ? d : []))
@@ -154,11 +151,9 @@ export default function PublicDashboard() {
     fetch("/api/attendance/leaderboard")
       .then((r) => r.json())
       .then((d) => setAttendanceLeaderboard(Array.isArray(d.leaderboard) ? d.leaderboard : []))
-      .catch(() => {})
-      .finally(() => setAttendanceLoading(false));
+      .catch(() => {});
   }, []);
 
-  // Fetch results only when examType is fully resolved
   useEffect(() => {
     if (!examReady || !examType) return;
     setLoading(true);
@@ -172,13 +167,12 @@ export default function PublicDashboard() {
       .catch(() => setLoading(false));
   }, [examReady, examType]);
 
-  // Sort by GPA descending; ties broken by total obtained
+  // Sort logic
   const ranked = results
     .filter((r) => r.hasMarks)
     .sort((a, b) => {
       if (leaderboardType === "cq") return b.totalCq - a.totalCq;
       if (leaderboardType === "mcq") return b.totalMcq - a.totalMcq;
-      // Overall: sort by GPA first, then total marks
       if (b.gpa !== a.gpa) return b.gpa - a.gpa;
       return b.totalObtained - a.totalObtained;
     });
@@ -191,59 +185,94 @@ export default function PublicDashboard() {
       })
     : [];
 
-  const filtered = searchQuery
-    ? ranked.filter((r) => r.name.toLowerCase().includes(searchQuery.toLowerCase()) || r.rollNumber.toString().includes(searchQuery))
-    : ranked;
+  const displayList = selectedSubject ? subjectRanked : ranked;
 
-  const top5 = ranked.slice(0, 5);
+  const filtered = searchQuery
+    ? displayList.filter(
+        (r) =>
+          r.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          r.rollNumber.toString().includes(searchQuery)
+      )
+    : displayList;
+
+  const top3 = ranked.slice(0, 3);
   const devRoll = settings?.developerRoll || 6;
   const devStudent = results.find((r) => r.rollNumber === devRoll);
 
+  const getTier = (gpa: number) => {
+    if (gpa >= 5.0) return "S";
+    if (gpa >= 4.0) return "A";
+    if (gpa >= 3.5) return "B";
+    if (gpa >= 3.0) return "C";
+    return "D";
+  };
+
   const Skeleton = () => (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {[...Array(4)].map((_, i) => (
-        <div key={i} className="h-14 md:h-16 rounded-xl md:rounded-2xl skeleton" />
+        <div key={i} className="h-16 rounded-2xl skeleton" />
       ))}
     </div>
   );
 
   return (
-    <div className="space-y-5 md:space-y-8 animate-fade-in overflow-x-hidden">
-      {/* Class Teacher & Exam Row */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
-        {settings?.classTeacherName && (
-          <div className="liquid-glass-strong rounded-2xl md:rounded-3xl p-4 md:p-6 flex items-center gap-3 md:gap-5">
-            {settings.classTeacherPicture ? (
-              <img src={settings.classTeacherPicture} alt={settings.classTeacherName}
-                className="w-12 h-12 md:w-16 md:h-16 rounded-full object-cover ring-2 md:ring-4 ring-white/60 shadow-lg flex-shrink-0" />
-            ) : (
-              <div className="w-12 h-12 md:w-16 md:h-16 rounded-full gradient-royal flex items-center justify-center text-white text-base md:text-xl font-bold ring-2 md:ring-4 ring-white/60 shadow-lg flex-shrink-0">
-                {settings.classTeacherName.charAt(0)}
-              </div>
+    <div className="space-y-8 animate-fade-in pb-16">
+      {/* 1. TOP CONTROL BANNER (Class Teacher & Exam Selector) */}
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+        {/* Class Teacher */}
+        <div className="md:col-span-6 liquid-glass-strong rounded-3xl p-5 flex items-center gap-4 border border-white/10 shadow-xl">
+          {settings?.classTeacherPicture ? (
+            <img
+              src={settings.classTeacherPicture}
+              alt={settings.classTeacherName}
+              className="w-14 h-14 rounded-2xl object-cover ring-2 ring-indigo-500/50 shadow-md flex-shrink-0"
+            />
+          ) : (
+            <div className="w-14 h-14 rounded-2xl gradient-royal flex items-center justify-center text-white text-xl font-extrabold ring-2 ring-indigo-500/50 shadow-md flex-shrink-0">
+              {settings?.classTeacherName ? settings.classTeacherName.charAt(0) : "T"}
+            </div>
+          )}
+          <div className="min-w-0">
+            <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest block mb-0.5">
+              {t("dash.class_teacher")}
+            </span>
+            <h3 className="text-base md:text-lg font-bold text-white truncate">
+              {settings?.classTeacherName || "Class Teacher"}
+            </h3>
+            {settings?.classTeacherDegree && (
+              <p className="text-xs text-slate-400 truncate">{settings.classTeacherDegree}</p>
             )}
-            <div className="min-w-0">
-              <p className="text-[10px] md:text-xs text-muted font-semibold uppercase tracking-wider mb-0.5 md:mb-1">{t("dash.class_teacher")}</p>
-              <h3 className="text-sm md:text-lg font-bold text-charcoal truncate">{settings.classTeacherName}</h3>
-              {settings.classTeacherDegree && <p className="text-xs md:text-sm text-muted truncate">{settings.classTeacherDegree}</p>}
-            </div>
           </div>
-        )}
-        <div className="liquid-glass rounded-2xl md:rounded-3xl p-4 md:p-6">
-          <div className="flex items-center gap-2 md:gap-3 mb-2 md:mb-3">
-            <div className="w-7 h-7 md:w-8 md:h-8 rounded-lg gradient-royal flex items-center justify-center flex-shrink-0">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" className="md:w-[14px] md:h-[14px]"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+        </div>
+
+        {/* Exam Type Selector */}
+        <div className="md:col-span-6 liquid-glass-strong rounded-3xl p-5 flex flex-col justify-between border border-white/10 shadow-xl">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                {t("dash.exam")}
+              </span>
             </div>
-            <div className="min-w-0">
-              <h3 className="text-xs md:text-sm font-bold text-charcoal truncate">{t("dash.exam")}</h3>
-              <p className="text-[10px] md:text-xs text-muted truncate">{t("dash.exam_desc")}</p>
-            </div>
+            <span className="text-[10px] text-indigo-300 font-mono">
+              {EXAM_TYPES.length} Exams Available
+            </span>
           </div>
-          <div className="flex gap-1.5 md:gap-2 flex-wrap">
+
+          <div className="flex gap-2 flex-wrap">
             {EXAM_TYPES.map((exam) => (
-              <button key={exam} onClick={() => { setExamType(exam); playClick(); }}
-                className={`px-2.5 md:px-3.5 py-1 md:py-1.5 rounded-full md:rounded-xl text-[11px] md:text-xs font-semibold transition-all ${
-                  examType === exam ? "gradient-royal text-white shadow-md" : "liquid-glass-sm text-charcoal hover:bg-white/60"
-                }`}>
+              <button
+                key={exam}
+                onClick={() => {
+                  setExamType(exam);
+                  playClick();
+                }}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all duration-200 ${
+                  examType === exam
+                    ? "gradient-royal text-white shadow-lg shadow-indigo-500/30 scale-[1.02]"
+                    : "liquid-glass-sm text-slate-400 hover:text-white hover:bg-white/10"
+                }`}
+              >
                 {tExam(exam)}
               </button>
             ))}
@@ -251,714 +280,460 @@ export default function PublicDashboard() {
         </div>
       </div>
 
-      {loading ? <Skeleton /> : (
+      {loading ? (
+        <Skeleton />
+      ) : (
         <>
-          {/* Captain & Monitor Cards */}
-          {(settings?.captainRoll || settings?.monitorRoll) && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
-              {[
-                { roll: settings?.captainRoll, title: settings?.captainTitle || "Captain", gradient: "from-amber-400 to-orange-500", shadow: "shadow-amber-500/20", icon: "👑", glow: "bg-amber-400/20" },
-                { roll: settings?.monitorRoll, title: settings?.monitorTitle || "Monitor", gradient: "from-royal to-blue-600", shadow: "shadow-royal/20", icon: "🎖️", glow: "bg-royal/20" },
-              ].map(({ roll, title, gradient, shadow, icon, glow }) => {
-                if (!roll) return null;
-                const student = results.find(r => r.rollNumber === roll);
-                const info = allStudents.find(s => s.rollNumber === roll);
-                if (!info) return null;
-                return (
-                  <div key={title} className="liquid-glass-strong rounded-2xl md:rounded-3xl p-4 md:p-5 relative overflow-hidden">
-                    <div className={`absolute top-0 right-0 w-32 h-32 ${glow} rounded-full blur-[50px] -mr-10 -mt-10`} />
-                    <div className="relative z-10">
-                      <div className="flex items-center gap-3 md:gap-4">
-                        {info.profilePicture ? (
-                          <img src={info.profilePicture} alt={info.name} className="w-14 h-14 md:w-16 md:h-16 rounded-full object-cover ring-3 ring-white/60 shadow-lg flex-shrink-0" />
-                        ) : (
-                          <div className={`w-14 h-14 md:w-16 md:h-16 rounded-full bg-gradient-to-br ${gradient} flex items-center justify-center text-white text-lg md:text-xl font-bold ring-3 ring-white/60 shadow-lg ${shadow} flex-shrink-0`}>
-                            {info.name.charAt(0)}
-                          </div>
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-0.5">
-                            <span className="text-lg md:text-xl">{icon}</span>
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] md:text-xs font-bold bg-gradient-to-r ${gradient} text-white shadow-sm`}>{title}</span>
-                          </div>
-                          <h4 className="text-sm md:text-base font-bold text-charcoal truncate">{info.name}</h4>
-                          <p className="text-[10px] md:text-xs text-muted">{lang === "bn" ? "রোল" : "Roll"} {info.rollNumber}</p>
-                        </div>
-                      </div>
-                      {student?.hasMarks && (
-                        <div className="flex gap-2 mt-3">
-                          <div className="flex-1 liquid-glass-sm rounded-xl p-2 md:p-2.5 text-center">
-                            <p className="text-lg md:text-xl font-black text-charcoal">{student.rank ?? "—"}</p>
-                            <p className="text-[9px] md:text-[10px] text-muted">{t("common.rank")}</p>
-                          </div>
-                          <div className="flex-1 liquid-glass-sm rounded-xl p-2 md:p-2.5 text-center">
-                            <p className="text-lg md:text-xl font-black text-charcoal">{student.average}%</p>
-                            <p className="text-[9px] md:text-[10px] text-muted">{t("common.average")}</p>
-                          </div>
-                          <div className="flex-1 liquid-glass-sm rounded-xl p-2 md:p-2.5 text-center">
-                            <p className="text-lg md:text-xl font-black" style={{ color: GRADE_COLORS[student.overallGrade] || "#6B7280" }}>{student.overallGrade}</p>
-                            <p className="text-[9px] md:text-[10px] text-muted">{t("common.grade")}</p>
-                          </div>
-                          <div className="flex-1 liquid-glass-sm rounded-xl p-2 md:p-2.5 text-center">
-                            <p className="text-lg md:text-xl font-black text-charcoal">{student.totalObtained}</p>
-                            <p className="text-[9px] md:text-[10px] text-muted">{t("common.total")}</p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Stats */}
-          {stats && stats.studentsWithMarks > 0 && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 md:gap-4">
-              <StatCard label={t("dash.students")} value={stats.totalStudents} icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>} color="text-royal" bgColor="bg-royal/10" />
-              <StatCard label={t("dash.highest")} value={stats.highest} icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>} color="text-emerald" bgColor="bg-emerald/10" />
-              <StatCard label={t("dash.average")} value={stats.average} icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>} color="text-amber" bgColor="bg-amber/10" />
-              <StatCard label={t("dash.pass_rate")} value={`${stats.passCount > 0 ? Math.round((stats.passCount / stats.studentsWithMarks) * 100) : 0}%`} icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>} color="text-emerald" bgColor="bg-emerald/10" />
-            </div>
-          )}
-
-          {/* Quick Result Lookup + Upcoming Events */}
-          <div id="results" className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
-            <MarkFinder />
-            <UpcomingEvents />
-          </div>
-
-          {/* ── TOP 5 PREMIUM PODIUM ── */}
-          {top5.length >= 3 && (
-            <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}
-              className="bg-white rounded-[2rem] sm:rounded-[2.5rem] md:rounded-[3.5rem] p-4 sm:p-6 md:p-10 shadow-[0_8px_40px_rgba(0,0,0,0.06)] overflow-hidden"
-            >
-              {/* Header */}
-              <div className="flex items-center gap-3 justify-center mb-8 md:mb-10">
-                <div className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 rounded-xl sm:rounded-2xl bg-amber-50 flex items-center justify-center shrink-0">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" strokeWidth="2" className="sm:w-[18px] sm:h-[18px] md:w-6 md:h-6"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
-                </div>
-                <h3 className="text-base sm:text-lg md:text-2xl font-extrabold text-charcoal tracking-tight">{t("dash.top_performers")}</h3>
+          {/* 2. STATS OVERVIEW CARDS */}
+          {stats && (
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 md:gap-4">
+              <div className="liquid-glass-strong p-4 rounded-3xl border border-white/10 relative overflow-hidden group hover:border-indigo-500/40 transition-all">
+                <div className="absolute top-0 right-0 w-16 h-16 bg-indigo-500/10 rounded-full blur-xl group-hover:bg-indigo-500/20 transition-all" />
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                  {lang === "bn" ? "মোট শিক্ষার্থী" : "Total Students"}
+                </span>
+                <span className="text-2xl md:text-3xl font-black text-white">{stats.totalStudents}</span>
+                <span className="text-[10px] text-indigo-400 block mt-1">
+                  {stats.studentsWithMarks} {lang === "bn" ? "পরীক্ষায় উপস্থিত" : "Exam Attended"}
+                </span>
               </div>
 
-              {/* Scrollable wrapper with edge padding for ultra-narrow screens */}
-              <div className="w-full max-w-full overflow-x-auto snap-x snap-mandatory scrollbar-hide px-4 sm:overflow-visible sm:px-0">
-                {/* Visual order: 5th | 3rd | 1st | 2nd | 4th */}
-                <div className="flex flex-row items-end justify-center gap-1 sm:gap-2 md:gap-3 min-w-[350px] sm:min-w-0 mx-auto sm:max-w-3xl pb-2">
-                {[4, 2, 0, 1, 3].map((idx, col) => {
-                  const s = top5[idx];
-                  if (!s) return <div key={`e-${col}`} className="w-[65px] sm:min-w-[90px] flex-1 shrink-0" />;
-                  const rankTexts = ["1st","2nd","3rd","4th","5th"];
-                  const rankCols: Record<string, string> = { "1st": "text-amber-600", "2nd": "text-slate-500", "3rd": "text-orange-600", "4th": "text-blue-500", "5th": "text-emerald-500" };
-                  const configs: Record<number, { ring: string; icon: string; card: string; border: string; pad: string }> = {
-                    0: { ring: "#fbbf24", icon: "#f59e0b", card: "bg-gradient-to-b from-amber-50 to-amber-100/80", border: "border-amber-200/60", pad: "pb-4 sm:pb-8 md:pb-12" },
-                    1: { ring: "#94a3b8", icon: "#64748b", card: "bg-gradient-to-b from-slate-50 to-slate-100/80", border: "border-slate-200/60", pad: "pb-3 sm:pb-6 md:pb-10" },
-                    2: { ring: "#fb923c", icon: "#ea580c", card: "bg-gradient-to-b from-orange-50 to-orange-100/80", border: "border-orange-200/60", pad: "pb-2 sm:pb-5 md:pb-8" },
-                    3: { ring: "#60a5fa", icon: "#3b82f6", card: "bg-gradient-to-b from-blue-50 to-blue-100/80", border: "border-blue-200/60", pad: "pb-2 sm:pb-4 md:pb-6" },
-                    4: { ring: "#34d399", icon: "#10b981", card: "bg-gradient-to-b from-emerald-50 to-emerald-100/80", border: "border-emerald-200/60", pad: "pb-1 sm:pb-3 md:pb-4" },
-                  };
-                  const c = configs[idx];
-                  return (
-                    <motion.div key={s.studentId}
-                      initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: col * 0.06 }}
-                      className="flex flex-col items-center gap-0.5 sm:gap-2 cursor-pointer group snap-center shrink-0 flex-1 max-w-[72px] sm:max-w-none min-w-0"
-                      onClick={() => setDetailStudent(s)}>
-                      {/* 1. Avatar with glowing ring */}
-                      <motion.div whileHover={{ scale: 1.08, y: -4 }}
-                        className="w-10 h-10 sm:w-14 sm:h-14 md:w-16 md:h-16 rounded-full bg-white shadow-md flex items-center justify-center shrink-0"
-                        style={{ border: `3px solid ${c.ring}` }}>
-                        {s.profilePicture ? <img src={s.profilePicture} alt="" className="w-full h-full rounded-full object-cover" />
-                          : <span className="text-xs sm:text-base md:text-lg font-bold bg-gradient-to-br from-royal to-purple-600 bg-clip-text text-transparent">{s.name.charAt(0)}</span>}
-                      </motion.div>
-                      {/* 2. Name + Roll */}
-                      <div className="flex flex-col items-center gap-0 shrink-0">
-                        <p className="text-[9px] sm:text-xs font-bold text-charcoal text-center truncate w-full max-w-[68px] sm:max-w-[100px]">{s.name}</p>
-                        <p className="text-[7px] sm:text-[10px] text-muted">R{s.rollNumber}</p>
+              <div className="liquid-glass-strong p-4 rounded-3xl border border-white/10 relative overflow-hidden group hover:border-emerald-500/40 transition-all">
+                <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-500/10 rounded-full blur-xl group-hover:bg-emerald-500/20 transition-all" />
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                  {lang === "bn" ? "সর্বোচ্চ নম্বর" : "Highest Score"}
+                </span>
+                <span className="text-2xl md:text-3xl font-black text-emerald-400">{stats.highest}</span>
+                <span className="text-[10px] text-slate-400 block mt-1">out of {stats.maxPossibleTotal}</span>
+              </div>
+
+              <div className="liquid-glass-strong p-4 rounded-3xl border border-white/10 relative overflow-hidden group hover:border-cyan-500/40 transition-all">
+                <div className="absolute top-0 right-0 w-16 h-16 bg-cyan-500/10 rounded-full blur-xl group-hover:bg-cyan-500/20 transition-all" />
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                  {lang === "bn" ? "শ্রেণি গড়" : "Class Average"}
+                </span>
+                <span className="text-2xl md:text-3xl font-black text-cyan-400">{stats.average}%</span>
+                <span className="text-[10px] text-slate-400 block mt-1">Overall percentage</span>
+              </div>
+
+              <div className="liquid-glass-strong p-4 rounded-3xl border border-white/10 relative overflow-hidden group hover:border-amber-500/40 transition-all">
+                <div className="absolute top-0 right-0 w-16 h-16 bg-amber-500/10 rounded-full blur-xl group-hover:bg-amber-500/20 transition-all" />
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                  {lang === "bn" ? "পাস হার" : "Pass Rate"}
+                </span>
+                <span className="text-2xl md:text-3xl font-black text-amber-400">
+                  {stats.totalStudents > 0 ? Math.round((stats.passCount / stats.totalStudents) * 100) : 0}%
+                </span>
+                <span className="text-[10px] text-slate-400 block mt-1">{stats.passCount} Passed / {stats.failCount} Failed</span>
+              </div>
+
+              <div className="col-span-2 lg:col-span-1 liquid-glass-strong p-4 rounded-3xl border border-white/10 relative overflow-hidden group hover:border-purple-500/40 transition-all">
+                <div className="absolute top-0 right-0 w-16 h-16 bg-purple-500/10 rounded-full blur-xl group-hover:bg-purple-500/20 transition-all" />
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                  {lang === "bn" ? "শীর্ষ স্থান GPA" : "Top GPA"}
+                </span>
+                <span className="text-2xl md:text-3xl font-black text-purple-400">
+                  {top3[0]?.gpa ? top3[0].gpa.toFixed(2) : "5.00"}
+                </span>
+                <span className="text-[10px] text-purple-300 block mt-1 truncate">
+                  Top: {top3[0]?.name || "—"}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* 3. VISUAL CHARTS & ANALYTICS SECTION */}
+          {stats && <DashboardCharts stats={stats} />}
+
+          {/* 4. CLASS PODIUM (TOP 3 PERFORMERS) */}
+          {top3.length > 0 && leaderboardType === "overall" && !selectedSubject && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🏆</span>
+                <h3 className="text-lg md:text-xl font-extrabold text-white tracking-tight">
+                  {lang === "bn" ? "শ্রেণি মেধা পোডিয়াম" : "Class Podium — Top Rankers"}
+                </h3>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                {/* 2nd Place */}
+                {top3[1] && (
+                  <motion.div
+                    whileHover={{ y: -4 }}
+                    onClick={() => { setDetailStudent(top3[1]); playOpen(); }}
+                    className="liquid-glass-strong p-5 rounded-3xl border border-slate-700/50 shadow-xl cursor-pointer order-2 md:order-1 relative overflow-hidden"
+                  >
+                    <div className="flex flex-col items-center text-center">
+                      <div className="relative mb-3">
+                        {top3[1].profilePicture ? (
+                          <img src={top3[1].profilePicture} alt={top3[1].name} className="w-20 h-20 rounded-full object-cover ring-4 ring-slate-400 shadow-xl" />
+                        ) : (
+                          <div className="w-20 h-20 rounded-full podium-silver flex items-center justify-center text-white text-2xl font-black ring-4 ring-slate-400 shadow-xl">
+                            {top3[1].name.charAt(0)}
+                          </div>
+                        )}
+                        <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-slate-700 text-slate-200 border border-slate-400">
+                          2nd Rank
+                        </span>
                       </div>
-                      {/* 3. Glassmorphic Rank Card */}
-                      <div className={`w-full rounded-xl sm:rounded-2xl ${c.card} ${c.border} border shadow-md backdrop-blur-sm flex flex-col items-center justify-center gap-0.5 px-1 sm:px-2 pt-1.5 sm:pt-3 ${c.pad} transition-all duration-300 group-hover:shadow-lg group-hover:-translate-y-1`}>
-                        {/* Rank medal SVG */}
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={c.icon} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="sm:w-5 sm:h-5 md:w-6 md:h-6 shrink-0">
-                          <circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/>
-                        </svg>
-                        {/* Rank text */}
-                        <span className={`text-[8px] sm:text-[10px] md:text-xs font-extrabold tracking-wide ${rankCols[rankTexts[idx]] || "text-muted"}`}>{rankTexts[idx]}</span>
-                        <span className="text-[9px] sm:text-xs md:text-sm font-extrabold text-charcoal">{s.totalObtained}</span>
-                        <span className={`text-[7px] sm:text-[10px] md:text-xs font-bold ${s.gpa >= 5 ? "text-emerald" : s.gpa >= 4 ? "text-royal" : "text-amber"}`}>GPA {s.gpa.toFixed(2)}</span>
+                      <h4 className="text-base font-bold text-white truncate max-w-full mt-2">{top3[1].name}</h4>
+                      <p className="text-xs text-slate-400 mb-3">Roll: {top3[1].rollNumber}</p>
+
+                      <div className="w-full flex justify-between items-center liquid-glass-sm px-3 py-2 rounded-2xl text-xs">
+                        <span className="font-bold text-white">{top3[1].totalObtained} pts</span>
+                        <span className="font-bold text-indigo-400 font-mono">GPA {top3[1].gpa.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* 1st Place (Center & Highest) */}
+                {top3[0] && (
+                  <motion.div
+                    whileHover={{ y: -6 }}
+                    onClick={() => { setDetailStudent(top3[0]); playOpen(); }}
+                    className="liquid-glass-strong p-6 rounded-3xl border-2 border-amber-500/50 shadow-2xl cursor-pointer order-1 md:order-2 relative overflow-hidden bg-gradient-to-b from-indigo-950/40 via-slate-900/90 to-slate-900"
+                  >
+                    <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/10 rounded-full blur-2xl pointer-events-none" />
+                    <div className="flex flex-col items-center text-center">
+                      <span className="text-3xl mb-1 animate-bounce">👑</span>
+                      <div className="relative mb-3">
+                        {top3[0].profilePicture ? (
+                          <img src={top3[0].profilePicture} alt={top3[0].name} className="w-24 h-24 rounded-full object-cover ring-4 ring-amber-400 shadow-2xl" />
+                        ) : (
+                          <div className="w-24 h-24 rounded-full podium-gold flex items-center justify-center text-white text-3xl font-black ring-4 ring-amber-400 shadow-2xl">
+                            {top3[0].name.charAt(0)}
+                          </div>
+                        )}
+                        <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full text-[10px] font-black bg-amber-500 text-black shadow-lg">
+                          1ST RANK
+                        </span>
+                      </div>
+                      <h4 className="text-lg font-black text-white truncate max-w-full mt-2">{top3[0].name}</h4>
+                      <p className="text-xs text-amber-300 font-medium mb-3">Roll: {top3[0].rollNumber}</p>
+
+                      <div className="w-full flex justify-between items-center liquid-glass-sm px-4 py-2.5 rounded-2xl text-xs border border-amber-500/30">
+                        <span className="font-extrabold text-amber-400">{top3[0].totalObtained} pts</span>
+                        <span className="font-black text-white font-mono">GPA {top3[0].gpa.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* 3rd Place */}
+                {top3[2] && (
+                  <motion.div
+                    whileHover={{ y: -4 }}
+                    onClick={() => { setDetailStudent(top3[2]); playOpen(); }}
+                    className="liquid-glass-strong p-5 rounded-3xl border border-amber-700/30 shadow-xl cursor-pointer order-3 relative overflow-hidden"
+                  >
+                    <div className="flex flex-col items-center text-center">
+                      <div className="relative mb-3">
+                        {top3[2].profilePicture ? (
+                          <img src={top3[2].profilePicture} alt={top3[2].name} className="w-20 h-20 rounded-full object-cover ring-4 ring-amber-700 shadow-xl" />
+                        ) : (
+                          <div className="w-20 h-20 rounded-full podium-bronze flex items-center justify-center text-white text-2xl font-black ring-4 ring-amber-700 shadow-xl">
+                            {top3[2].name.charAt(0)}
+                          </div>
+                        )}
+                        <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-800 text-amber-200 border border-amber-600">
+                          3rd Rank
+                        </span>
+                      </div>
+                      <h4 className="text-base font-bold text-white truncate max-w-full mt-2">{top3[2].name}</h4>
+                      <p className="text-xs text-slate-400 mb-3">Roll: {top3[2].rollNumber}</p>
+
+                      <div className="w-full flex justify-between items-center liquid-glass-sm px-3 py-2 rounded-2xl text-xs">
+                        <span className="font-bold text-white">{top3[2].totalObtained} pts</span>
+                        <span className="font-bold text-indigo-400 font-mono">GPA {top3[2].gpa.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* 5. MAIN LEADERBOARD & CLASS ROSTER */}
+          <div className="liquid-glass-strong rounded-3xl p-5 md:p-7 space-y-6 border border-white/10 shadow-2xl">
+            {/* Header & Controls */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-white/10 pb-5">
+              <div>
+                <h3 className="text-lg md:text-xl font-bold text-white tracking-tight">
+                  {lang === "bn" ? "মেধাক্রম ও শিক্ষার্থী তালিকা" : "Academic Leaderboard & Class Roster"}
+                </h3>
+                <p className="text-xs text-slate-400">
+                  {filtered.length} {lang === "bn" ? "শিক্ষার্থী প্রদর্শিত হচ্ছে" : "Students listed"}
+                </p>
+              </div>
+
+              {/* Mode Tabs */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-center bg-slate-950/70 p-1 rounded-2xl border border-white/10">
+                  <button
+                    onClick={() => { setLeaderboardType("overall"); setSelectedSubject(null); playClick(); }}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                      leaderboardType === "overall" && !selectedSubject
+                        ? "bg-indigo-600 text-white shadow-md"
+                        : "text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    {lang === "bn" ? "সামগ্রিক" : "Overall"}
+                  </button>
+                  <button
+                    onClick={() => { setLeaderboardType("cq"); setSelectedSubject(null); playClick(); }}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                      leaderboardType === "cq"
+                        ? "bg-indigo-600 text-white shadow-md"
+                        : "text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    CQ Rank
+                  </button>
+                  <button
+                    onClick={() => { setLeaderboardType("mcq"); setSelectedSubject(null); playClick(); }}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                      leaderboardType === "mcq"
+                        ? "bg-indigo-600 text-white shadow-md"
+                        : "text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    MCQ Rank
+                  </button>
+                </div>
+
+                {/* View Switcher (Table vs Grid) */}
+                <div className="flex items-center bg-slate-950/70 p-1 rounded-2xl border border-white/10">
+                  <button
+                    onClick={() => setViewMode("table")}
+                    className={`p-1.5 rounded-xl text-xs transition-all ${
+                      viewMode === "table" ? "bg-indigo-600 text-white" : "text-slate-400"
+                    }`}
+                  >
+                    📋
+                  </button>
+                  <button
+                    onClick={() => setViewMode("grid")}
+                    className={`p-1.5 rounded-xl text-xs transition-all ${
+                      viewMode === "grid" ? "bg-indigo-600 text-white" : "text-slate-400"
+                    }`}
+                  >
+                    🎴
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Search & Subject Chips */}
+            <div className="space-y-3">
+              {/* Search Bar */}
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder={lang === "bn" ? "নাম বা রোল দিয়ে খুঁজুন..." : "Search student name or roll number..."}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-slate-950/60 border border-white/10 rounded-2xl py-3 px-4 pl-11 text-xs text-white placeholder-slate-500 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all"
+                />
+                <svg
+                  className="absolute left-4 top-3.5 w-4 h-4 text-slate-500"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <circle cx="11" cy="11" r="8" strokeWidth="2" />
+                  <path d="M21 21l-4.35-4.35" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+              </div>
+
+              {/* Subject Chips */}
+              <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide py-1">
+                <button
+                  onClick={() => setSelectedSubject(null)}
+                  className={`px-3 py-1 rounded-full text-[11px] font-semibold flex-shrink-0 transition-all ${
+                    selectedSubject === null
+                      ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/40"
+                      : "liquid-glass-sm text-slate-400 hover:text-white"
+                  }`}
+                >
+                  {lang === "bn" ? "সকল বিষয়" : "All Subjects"}
+                </button>
+                {SUBJECTS.map((sub) => (
+                  <button
+                    key={sub}
+                    onClick={() => setSelectedSubject(selectedSubject === sub ? null : sub)}
+                    className={`px-3 py-1 rounded-full text-[11px] font-semibold flex-shrink-0 transition-all ${
+                      selectedSubject === sub
+                        ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/40"
+                        : "liquid-glass-sm text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    {tSubject(sub)}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* TABLE VIEW */}
+            {viewMode === "table" ? (
+              <div className="overflow-x-auto rounded-2xl border border-white/10">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-950/80 text-slate-400 uppercase font-bold text-[10px] border-b border-white/10">
+                    <tr>
+                      <th className="py-3.5 px-4 text-center">{lang === "bn" ? "স্থান" : "Rank"}</th>
+                      <th className="py-3.5 px-4">{lang === "bn" ? "শিক্ষার্থীর নাম" : "Student"}</th>
+                      <th className="py-3.5 px-3 text-center">{lang === "bn" ? "রোল" : "Roll"}</th>
+                      <th className="py-3.5 px-3 text-center">CQ</th>
+                      <th className="py-3.5 px-3 text-center">MCQ</th>
+                      <th className="py-3.5 px-4 text-center">{lang === "bn" ? "প্রাপ্ত নম্বর" : "Total Obtained"}</th>
+                      <th className="py-3.5 px-3 text-center">GPA</th>
+                      <th className="py-3.5 px-3 text-center">{lang === "bn" ? "গ্রেড" : "Grade"}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5 bg-slate-900/40">
+                    {filtered.map((item, idx) => {
+                      const displayRank = idx + 1;
+                      const tier = getTier(item.gpa);
+                      return (
+                        <tr
+                          key={item.studentId}
+                          onClick={() => { setDetailStudent(item); playOpen(); }}
+                          className="hover:bg-indigo-500/10 cursor-pointer transition-colors"
+                        >
+                          <td className="py-3.5 px-4 text-center font-black">
+                            {displayRank === 1 ? (
+                              <span className="w-7 h-7 rounded-full bg-amber-500/20 text-amber-400 inline-flex items-center justify-center font-bold">1</span>
+                            ) : displayRank === 2 ? (
+                              <span className="w-7 h-7 rounded-full bg-slate-400/20 text-slate-300 inline-flex items-center justify-center font-bold">2</span>
+                            ) : displayRank === 3 ? (
+                              <span className="w-7 h-7 rounded-full bg-amber-800/20 text-amber-500 inline-flex items-center justify-center font-bold">3</span>
+                            ) : (
+                              <span className="text-slate-400">#{displayRank}</span>
+                            )}
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <div className="flex items-center gap-3">
+                              {item.profilePicture ? (
+                                <img src={item.profilePicture} alt={item.name} className="w-8 h-8 rounded-full object-cover ring-2 ring-white/10" />
+                              ) : (
+                                <div className="w-8 h-8 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-xs">
+                                  {item.name.charAt(0)}
+                                </div>
+                              )}
+                              <div>
+                                <p className="font-bold text-white">{item.name}</p>
+                                <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded tier-${tier.toLowerCase()}`}>
+                                  Tier {tier}
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-3 text-center text-slate-300 font-mono">{item.rollNumber}</td>
+                          <td className="py-3.5 px-3 text-center text-slate-400 font-mono">{item.totalCq}</td>
+                          <td className="py-3.5 px-3 text-center text-slate-400 font-mono">{item.totalMcq}</td>
+                          <td className="py-3.5 px-4 text-center font-extrabold text-white font-mono">
+                            {item.totalObtained}
+                          </td>
+                          <td className="py-3.5 px-3 text-center font-black text-indigo-400 font-mono">
+                            {item.gpa.toFixed(2)}
+                          </td>
+                          <td className="py-3.5 px-3 text-center">
+                            <span
+                              className="px-2.5 py-0.5 rounded-full text-[10px] font-black"
+                              style={{
+                                backgroundColor: `${GRADE_COLORS[item.overallGrade] || "#64748B"}20`,
+                                color: GRADE_COLORS[item.overallGrade] || "#64748B",
+                                border: `1px solid ${GRADE_COLORS[item.overallGrade] || "#64748B"}40`,
+                              }}
+                            >
+                              {item.overallGrade}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              /* GRID CARD VIEW */
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                {filtered.map((item, idx) => {
+                  const displayRank = idx + 1;
+                  const tier = getTier(item.gpa);
+                  return (
+                    <motion.div
+                      key={item.studentId}
+                      whileHover={{ y: -3 }}
+                      onClick={() => { setDetailStudent(item); playOpen(); }}
+                      className="liquid-glass-sm p-4 rounded-2xl border border-white/10 cursor-pointer space-y-3 relative overflow-hidden hover:border-indigo-500/40 transition-all"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-indigo-600/30 text-indigo-300 border border-indigo-500/30">
+                          Rank #{displayRank}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-black tier-${tier.toLowerCase()}`}>
+                          Tier {tier}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        {item.profilePicture ? (
+                          <img src={item.profilePicture} alt={item.name} className="w-12 h-12 rounded-xl object-cover ring-2 ring-white/10" />
+                        ) : (
+                          <div className="w-12 h-12 rounded-xl bg-slate-800 text-white flex items-center justify-center font-bold text-lg">
+                            {item.name.charAt(0)}
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <h4 className="text-sm font-bold text-white truncate">{item.name}</h4>
+                          <p className="text-xs text-slate-400">Roll: {item.rollNumber}</p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-1 pt-2 border-t border-white/5 text-center text-xs">
+                        <div>
+                          <span className="text-[9px] text-slate-500 block">CQ</span>
+                          <span className="font-bold text-slate-300">{item.totalCq}</span>
+                        </div>
+                        <div>
+                          <span className="text-[9px] text-slate-500 block">MCQ</span>
+                          <span className="font-bold text-slate-300">{item.totalMcq}</span>
+                        </div>
+                        <div>
+                          <span className="text-[9px] text-slate-500 block">GPA</span>
+                          <span className="font-black text-indigo-400">{item.gpa.toFixed(2)}</span>
+                        </div>
                       </div>
                     </motion.div>
                   );
                 })}
               </div>
-              </div>
-            </motion.div>
-          )}
-
-          {/* Leaderboard */}
-          <div id="leaderboard" className="liquid-glass-strong rounded-2xl md:rounded-3xl p-4 md:p-6 overflow-hidden">
-            <div className="flex flex-col gap-3 md:gap-4 mb-4 md:mb-6">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-2 md:gap-3 min-w-0">
-                  <div className="w-8 h-8 md:w-10 md:h-10 rounded-xl bg-amber/10 flex items-center justify-center text-amber flex-shrink-0">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" /><line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" /></svg>
-                  </div>
-                  <div className="min-w-0">
-                    <h3 className="text-base md:text-xl font-bold text-charcoal truncate">{t("dash.leaderboard")}</h3>
-                    <p className="text-[11px] md:text-sm text-muted truncate">{t("dash.rankings")}</p>
-                  </div>
-                </div>
-              </div>
-              <div className="flex gap-1.5 md:gap-2 flex-wrap items-center">
-                {(["overall", "cq", "mcq"] as LeaderboardType[]).map((type) => (
-                  <button key={type} onClick={() => { setLeaderboardType(type); setSelectedSubject(null); playClick(); }}
-                    className={`px-3 md:px-4 py-1.5 md:py-2 rounded-full md:rounded-2xl text-[11px] md:text-xs font-semibold uppercase tracking-wider transition-all ${
-                      leaderboardType === type && !selectedSubject ? "gradient-royal text-white shadow-md" : "liquid-glass-sm text-muted hover:text-charcoal"
-                    }`}>{type === "overall" ? t("common.overall") : type === "cq" ? t("common.cq") : t("common.mcq")}</button>
-                ))}
-                <select value={selectedSubject || ""} onChange={(e) => { setSelectedSubject(e.target.value || null); if (e.target.value) setLeaderboardType("overall"); }}
-                  className="px-2.5 md:px-3 py-1.5 md:py-2 rounded-full md:rounded-2xl text-[11px] md:text-xs font-semibold liquid-glass-sm text-charcoal border-0 max-w-[120px] md:max-w-none">
-                  <option value="">{t("common.subject_sel")}</option>
-                  {SUBJECTS.map((s) => (<option key={s} value={s}>{tSubject(s)}</option>))}
-                </select>
-              </div>
-            </div>
-
-            <div className="mb-3 md:mb-4">
-              <div className="relative">
-                <svg className="absolute left-3 md:left-4 top-1/2 -translate-y-1/2 text-muted" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
-                <input type="text" placeholder={t("dash.search")} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 md:pl-11 pr-3 md:pr-4 py-2.5 md:py-3 rounded-xl md:rounded-2xl border border-white/40 bg-white/40 text-xs md:text-sm backdrop-blur-sm" />
-              </div>
-            </div>
-
-            <div className="overflow-x-auto -mx-4 md:mx-0 px-4 md:px-0">
-              <div className="min-w-[320px]">
-                {selectedSubject ? <SubjectLeaderboardTable students={subjectRanked} subject={selectedSubject} onStudentClick={setDetailStudent} /> : <OverallLeaderboardTable students={filtered} type={leaderboardType} maxTotal={stats?.maxPossibleTotal || 0} onStudentClick={setDetailStudent} />}
-              </div>
-            </div>
-          </div>
-
-          {/* Attendance Leaderboard */}
-          <div id="attendance-leaderboard" className="liquid-glass-strong rounded-2xl md:rounded-3xl p-4 md:p-6 overflow-hidden">
-            <div className="flex items-center gap-2 md:gap-3 min-w-0 mb-4 md:mb-6">
-              <div className="w-8 h-8 md:w-10 md:h-10 rounded-xl bg-emerald/10 flex items-center justify-center text-emerald flex-shrink-0">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
-              </div>
-              <div className="min-w-0">
-                <h3 className="text-base md:text-xl font-bold text-charcoal truncate">{t("dash.attendance_leaderboard")}</h3>
-                <p className="text-[11px] md:text-sm text-muted truncate">{t("dash.attendance_rankings")}</p>
-              </div>
-            </div>
-
-            {attendanceLoading ? (
-              <div className="h-40 rounded-2xl skeleton" />
-            ) : attendanceLeaderboard.length === 0 ? (
-              <div className="text-center py-10 text-sm text-muted">{t("dash.no_attendance_data")}</div>
-            ) : (
-              <div className="overflow-x-auto -mx-4 md:mx-0 px-4 md:px-0">
-                <div className="min-w-[320px]">
-                  <AttendanceLeaderboardTable students={attendanceLeaderboard} />
-                </div>
-              </div>
             )}
           </div>
 
-          {/* Subject Performance */}
-          {stats && stats.subjectAverages.length > 0 && stats.studentsWithMarks > 0 && (
-            <div className="liquid-glass rounded-2xl md:rounded-3xl p-4 md:p-6">
-              <div className="flex items-center gap-2 md:gap-3 mb-4 md:mb-6">
-                <div className="w-8 h-8 md:w-10 md:h-10 rounded-xl bg-royal/10 flex items-center justify-center text-royal flex-shrink-0">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" /></svg>
-                </div>
-                <h3 className="text-base md:text-xl font-bold text-charcoal">{t("dash.subject_perf")}</h3>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 md:gap-4">
-                {stats.subjectAverages.map((sa) => (
-                  <div key={sa.subject} className="liquid-glass-sm rounded-xl md:rounded-2xl p-3 md:p-4">
-                    <div className="flex items-center justify-between mb-1.5 md:mb-2 gap-2">
-                      <span className="text-xs md:text-sm font-semibold text-charcoal truncate">{tSubject(sa.subject)}</span>
-                      <span className="text-[10px] md:text-xs text-muted font-medium flex-shrink-0">{sa.average}/{sa.max}</span>
-                    </div>
-                    <div className="w-full bg-white/50 rounded-full h-1.5 md:h-2.5"><div className="gradient-royal h-1.5 md:h-2.5 rounded-full transition-all duration-700" style={{ width: `${sa.max > 0 ? (sa.average / sa.max) * 100 : 0}%` }} /></div>
-                  </div>
-                ))}
-              </div>
+          {/* 6. EXTRA BENTO WIDGETS (Routine, Gallery, Study Materials, Events) */}
+          <div className="space-y-8">
+            <WeeklyRoutineTable />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <GalleryShowcase />
+              <UpcomingEvents />
             </div>
-          )}
-
-          {/* Grade Distribution */}
-          {stats && stats.studentsWithMarks > 0 && (
-            <div className="liquid-glass rounded-2xl md:rounded-3xl p-4 md:p-6 overflow-hidden">
-              <div className="flex items-center gap-2 md:gap-3 mb-4 md:mb-6">
-                <div className="w-8 h-8 md:w-10 md:h-10 rounded-xl bg-emerald/10 flex items-center justify-center text-emerald flex-shrink-0">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="12" width="4" height="8" rx="1"/><rect x="10" y="8" width="4" height="12" rx="1"/><rect x="17" y="4" width="4" height="16" rx="1"/></svg>
-                </div>
-                <h3 className="text-base md:text-xl font-bold text-charcoal">{t("dash.grade_dist")}</h3>
-              </div>
-              <div className="flex items-end justify-center gap-1.5 sm:gap-2 md:gap-3 h-32 md:h-48 overflow-x-auto scrollbar-hide px-2">
-                {Object.entries(stats.gradeDistribution).map(([grade, count]) => {
-                  const maxCount = Math.max(...Object.values(stats.gradeDistribution), 1);
-                  const height = (count / maxCount) * 100;
-                  return (
-                    <div key={grade} className="flex flex-col items-center gap-1 md:gap-2 flex-shrink-0">
-                      <span className="text-[10px] md:text-xs font-bold text-charcoal">{count}</span>
-                      <div className="w-7 sm:w-8 md:w-10 lg:w-14 rounded-t-lg md:rounded-t-xl transition-all duration-700" style={{ height: `${Math.max(height, 4)}%`, minHeight: "8px", backgroundColor: GRADE_COLORS[grade] || "#6B7280" }} />
-                      <span className="text-[10px] md:text-xs font-semibold text-muted">{grade}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Study Materials */}
-          <div id="materials"><StudyMaterials /></div>
-
-          <GalleryShowcase />
-
-          {teachers.length > 0 && (
-            <div id="teachers" className="liquid-glass rounded-2xl md:rounded-3xl p-4 md:p-6">
-              <div className="flex items-center gap-2 md:gap-3 mb-4 md:mb-6">
-                <div className="w-8 h-8 md:w-10 md:h-10 rounded-xl bg-royal/10 flex items-center justify-center text-royal flex-shrink-0">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
-                </div>
-                <h3 className="text-base md:text-xl font-bold text-charcoal">{t("dash.our_teachers")}</h3>
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 md:gap-4">
-                {teachers.map((teacher) => (
-                  <div key={teacher.id} className="liquid-glass-sm rounded-xl md:rounded-2xl p-3 md:p-5 text-center liquid-glass-hover">
-                    {teacher.profilePicture ? (
-                      <img src={teacher.profilePicture} alt={teacher.name} className="w-12 h-12 md:w-16 md:h-16 rounded-full object-cover ring-2 md:ring-3 ring-white/60 shadow-md mx-auto mb-2 md:mb-3" />
-                    ) : (
-                      <div className="w-12 h-12 md:w-16 md:h-16 rounded-full gradient-royal flex items-center justify-center text-white text-base md:text-xl font-bold ring-2 md:ring-3 ring-white/60 shadow-md mx-auto mb-2 md:mb-3">{teacher.name.charAt(0)}</div>
-                    )}
-                    <h4 className="text-xs md:text-sm font-bold text-charcoal truncate">{teacher.name}</h4>
-                    {teacher.degree && <p className="text-[10px] md:text-xs text-muted mt-0.5 truncate">{teacher.degree}</p>}
-                    {teacher.subject && <span className="inline-block mt-1.5 md:mt-2 px-2 md:px-2.5 py-0.5 md:py-1 rounded-lg text-[9px] md:text-[10px] font-semibold bg-royal/10 text-royal truncate max-w-full">{teacher.subject}</span>}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div id="routine"><WeeklyRoutineTable /></div>
-
-          {results.filter((r) => r.hasMarks).length === 0 && (
-            <div className="liquid-glass-strong rounded-2xl md:rounded-3xl p-8 md:p-16 text-center">
-              <div className="w-16 h-16 md:w-20 md:h-20 rounded-2xl md:rounded-3xl bg-royal/10 flex items-center justify-center mx-auto mb-4 md:mb-5">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#006FEE" strokeWidth="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /></svg>
-              </div>
-              <h3 className="text-lg md:text-xl font-bold text-charcoal mb-2">{t("dash.no_results")}</h3>
-              <p className="text-xs md:text-sm text-muted">{t("dash.no_results_desc")}</p>
-            </div>
-          )}
-
-          {/* Student Directory */}
-          <div id="students" className="liquid-glass rounded-2xl md:rounded-3xl p-4 md:p-6">
-            <div className="flex items-center justify-between gap-3 mb-4 md:mb-6">
-              <div className="flex items-center gap-2 md:gap-3 min-w-0">
-                <div className="w-8 h-8 md:w-10 md:h-10 rounded-xl bg-royal/10 flex items-center justify-center text-royal flex-shrink-0">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="md:w-[18px] md:h-[18px]"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
-                </div>
-                <div className="min-w-0">
-                  <h3 className="text-sm md:text-xl font-bold text-charcoal truncate">{t("dash.student_dir")}</h3>
-                  <p className="text-[10px] md:text-sm text-muted truncate hidden sm:block">{t("dash.click_view")}</p>
-                </div>
-              </div>
-              <button onClick={() => { setShowApplyForm(true); playOpen(); }}
-                className="gradient-royal text-white px-3 md:px-4 py-1.5 md:py-2 rounded-full md:rounded-xl text-xs md:text-sm font-semibold hover:opacity-90 transition-all shadow-md flex items-center gap-1 md:gap-2 flex-shrink-0">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-                {t("dash.apply")}
-              </button>
-            </div>
-            <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 md:gap-3">
-              {allStudents.map((s) => (
-                <button key={s.id} onClick={() => { setViewingStudentInfo(s); playOpen(); }}
-                  className="liquid-glass-sm rounded-xl md:rounded-2xl p-3 md:p-4 text-center hover:bg-white/50 transition-all">
-                  {s.profilePicture ? (
-                    <img src={s.profilePicture} alt={s.name} className="w-10 h-10 md:w-12 md:h-12 rounded-full object-cover ring-2 ring-white/50 mx-auto mb-1.5 md:mb-2" />
-                  ) : (
-                    <div className="w-10 h-10 md:w-12 md:h-12 rounded-full gradient-royal flex items-center justify-center text-white text-xs md:text-sm font-bold ring-2 ring-white/50 mx-auto mb-1.5 md:mb-2">{s.name.charAt(0)}</div>
-                  )}
-                  <p className="text-[11px] md:text-xs font-semibold text-charcoal truncate">{s.name}</p>
-                  <p className="text-[9px] md:text-[10px] text-muted">{t("common.roll")} {s.rollNumber}</p>
-                </button>
-              ))}
-              {allStudents.length === 0 && <div className="col-span-full text-center py-6 md:py-8 text-muted text-xs md:text-sm">{t("dash.no_students")}</div>}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <StudyMaterials />
+              <MarkFinder />
             </div>
           </div>
-
-          {/* Modals */}
-          {viewingStudentInfo && (
-            <div className="fixed inset-0 z-[9998] flex items-center justify-center p-3 md:p-4">
-              <div className="absolute inset-0 bg-charcoal/50 backdrop-blur-xl" onClick={() => setViewingStudentInfo(null)} />
-              <div className="relative liquid-glass-strong rounded-2xl md:rounded-3xl p-5 md:p-8 w-full max-w-[95vw] md:max-w-md max-h-[90vh] overflow-y-auto animate-scale-in">
-                <button onClick={() => setViewingStudentInfo(null)} className="absolute top-3 right-3 md:top-4 md:right-4 w-8 h-8 rounded-full liquid-glass-sm flex items-center justify-center text-muted hover:text-charcoal transition-colors">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                </button>
-                <div className="text-center mb-4 md:mb-6">
-                  {viewingStudentInfo.profilePicture ? (
-                    <img src={viewingStudentInfo.profilePicture} alt={viewingStudentInfo.name} className="w-20 h-20 md:w-24 md:h-24 rounded-full object-cover ring-4 ring-royal/20 shadow-xl mx-auto mb-3 md:mb-4" />
-                  ) : (
-                    <div className="w-20 h-20 md:w-24 md:h-24 rounded-full gradient-royal flex items-center justify-center text-white text-2xl md:text-3xl font-bold ring-4 ring-royal/20 shadow-xl mx-auto mb-3 md:mb-4">{viewingStudentInfo.name.charAt(0)}</div>
-                  )}
-                  <h3 className="text-lg md:text-xl font-bold text-charcoal truncate px-8">{viewingStudentInfo.name}</h3>
-                  <p className="text-xs md:text-sm text-muted">{t("common.roll")} {viewingStudentInfo.rollNumber}</p>
-                </div>
-                <div className="space-y-2 md:space-y-3">
-                  {viewingStudentInfo.studentId && <div className="flex justify-between items-center py-2 border-b border-white/20 gap-2"><span className="text-xs md:text-sm text-muted flex-shrink-0">{t("form.student_id")}</span><span className="text-xs md:text-sm font-medium text-charcoal truncate">{viewingStudentInfo.studentId}</span></div>}
-                  {viewingStudentInfo.fatherName && <div className="flex justify-between items-center py-2 border-b border-white/20 gap-2"><span className="text-xs md:text-sm text-muted flex-shrink-0">{t("form.father_name")}</span><span className="text-xs md:text-sm font-medium text-charcoal truncate">{viewingStudentInfo.fatherName}</span></div>}
-                  {viewingStudentInfo.motherName && <div className="flex justify-between items-center py-2 border-b border-white/20 gap-2"><span className="text-xs md:text-sm text-muted flex-shrink-0">{t("form.mother_name")}</span><span className="text-xs md:text-sm font-medium text-charcoal truncate">{viewingStudentInfo.motherName}</span></div>}
-                  {viewingStudentInfo.mobileNumber && <div className="flex justify-between items-center py-2 border-b border-white/20 gap-2"><span className="text-xs md:text-sm text-muted flex-shrink-0">{t("form.mobile")}</span><span className="text-xs md:text-sm font-medium text-charcoal">{viewingStudentInfo.mobileNumber}</span></div>}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {showApplyForm && (
-            <div className="fixed inset-0 z-[9998] flex items-center justify-center p-3 md:p-4">
-              <div className="absolute inset-0 bg-charcoal/50 backdrop-blur-xl" onClick={() => { setShowApplyForm(false); setSubmitSuccess(false); }} />
-              <div className="relative liquid-glass-strong rounded-2xl md:rounded-3xl p-5 md:p-8 w-full max-w-[95vw] md:max-w-lg max-h-[95vh] overflow-y-auto animate-scale-in">
-                <button onClick={() => { setShowApplyForm(false); setSubmitSuccess(false); }} className="absolute top-3 right-3 md:top-4 md:right-4 w-8 h-8 rounded-full liquid-glass-sm flex items-center justify-center text-muted hover:text-charcoal transition-colors">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                </button>
-                {submitSuccess ? (
-                  <div className="text-center py-6 md:py-8">
-                    <div className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-emerald/10 flex items-center justify-center mx-auto mb-3 md:mb-4">
-                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg>
-                    </div>
-                    <h3 className="text-lg md:text-xl font-bold text-charcoal mb-2">{t("dash.apply_success")}</h3>
-                    <p className="text-xs md:text-sm text-muted px-2">{t("dash.apply_pending")}</p>
-                    <button onClick={() => { setShowApplyForm(false); setSubmitSuccess(false); }} className="mt-5 md:mt-6 gradient-royal text-white px-5 md:px-6 py-2.5 md:py-3 rounded-xl md:rounded-2xl text-xs md:text-sm font-semibold">{t("dash.close")}</button>
-                  </div>
-                ) : (
-                  <>
-                    <div className="text-center mb-5 md:mb-6">
-                      <div className="w-14 h-14 md:w-16 md:h-16 gradient-royal rounded-xl md:rounded-2xl flex items-center justify-center mx-auto mb-3 md:mb-4 shadow-lg">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><line x1="19" y1="8" x2="19" y2="14" /><line x1="22" y1="11" x2="16" y2="11" /></svg>
-                      </div>
-                      <h2 className="text-xl md:text-2xl font-bold text-charcoal">{t("dash.apply_title")}</h2>
-                      <p className="text-muted text-xs md:text-sm mt-1">{t("dash.apply_desc")}</p>
-                    </div>
-                    <form onSubmit={async (e) => {
-                      e.preventDefault(); setSubmitting(true);
-                      try {
-                        const res = await fetch("/api/applications", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(applyForm) });
-                        if (res.ok) { setSubmitSuccess(true); setApplyForm({ name: "", rollNumber: "", studentId: "", fatherName: "", motherName: "", mobileNumber: "" }); }
-                        else { const data = await res.json(); alert(data.error || "Failed"); }
-                      } catch { alert("Network error"); }
-                      setSubmitting(false);
-                    }} className="space-y-3 md:space-y-4">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
-                        <div className="sm:col-span-2">
-                          <label className="block text-xs md:text-sm font-medium text-charcoal mb-1 md:mb-1.5">{t("form.full_name")} *</label>
-                          <input type="text" required value={applyForm.name} onChange={(e) => setApplyForm({ ...applyForm, name: e.target.value })} className="w-full px-3 md:px-4 py-2.5 md:py-3 rounded-xl md:rounded-2xl border border-white/40 bg-white/40 text-xs md:text-sm backdrop-blur-sm" placeholder={t("form.full_name")} />
-                        </div>
-                        <div>
-                          <label className="block text-xs md:text-sm font-medium text-charcoal mb-1 md:mb-1.5">{t("form.roll_number")} *</label>
-                          <select required value={applyForm.rollNumber} onChange={(e) => setApplyForm({ ...applyForm, rollNumber: e.target.value })} className="w-full px-3 md:px-4 py-2.5 md:py-3 rounded-xl md:rounded-2xl border border-white/40 bg-white/40 text-xs md:text-sm backdrop-blur-sm">
-                            <option value="">{t("form.select_roll")}</option>
-                            {Array.from({ length: 125 }, (_, i) => (i + 1) * 2).map((r) => (<option key={r} value={r}>{r}</option>))}
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-xs md:text-sm font-medium text-charcoal mb-1 md:mb-1.5">{t("form.student_id")}</label>
-                          <input type="text" value={applyForm.studentId} onChange={(e) => setApplyForm({ ...applyForm, studentId: e.target.value })} className="w-full px-3 md:px-4 py-2.5 md:py-3 rounded-xl md:rounded-2xl border border-white/40 bg-white/40 text-xs md:text-sm backdrop-blur-sm" placeholder={t("form.student_id")} />
-                        </div>
-                        <div>
-                          <label className="block text-xs md:text-sm font-medium text-charcoal mb-1 md:mb-1.5">{t("form.father_name")}</label>
-                          <input type="text" value={applyForm.fatherName} onChange={(e) => setApplyForm({ ...applyForm, fatherName: e.target.value })} className="w-full px-3 md:px-4 py-2.5 md:py-3 rounded-xl md:rounded-2xl border border-white/40 bg-white/40 text-xs md:text-sm backdrop-blur-sm" placeholder={t("form.father_name")} />
-                        </div>
-                        <div>
-                          <label className="block text-xs md:text-sm font-medium text-charcoal mb-1 md:mb-1.5">{t("form.mother_name")}</label>
-                          <input type="text" value={applyForm.motherName} onChange={(e) => setApplyForm({ ...applyForm, motherName: e.target.value })} className="w-full px-3 md:px-4 py-2.5 md:py-3 rounded-xl md:rounded-2xl border border-white/40 bg-white/40 text-xs md:text-sm backdrop-blur-sm" placeholder={t("form.mother_name")} />
-                        </div>
-                        <div className="sm:col-span-2">
-                          <label className="block text-xs md:text-sm font-medium text-charcoal mb-1 md:mb-1.5">{t("form.mobile")}</label>
-                          <input type="tel" value={applyForm.mobileNumber} onChange={(e) => setApplyForm({ ...applyForm, mobileNumber: e.target.value })} className="w-full px-3 md:px-4 py-2.5 md:py-3 rounded-xl md:rounded-2xl border border-white/40 bg-white/40 text-xs md:text-sm backdrop-blur-sm" placeholder={t("form.mobile")} />
-                        </div>
-                      </div>
-                      <button type="submit" disabled={submitting} className="w-full gradient-royal text-white py-3 md:py-3.5 rounded-xl md:rounded-2xl font-semibold text-xs md:text-sm hover:opacity-90 transition-all disabled:opacity-60 shadow-lg flex items-center justify-center gap-2">
-                        {submitting ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> {t("dash.submitting")}</> : <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg> {t("dash.submit_app")}</>}
-                      </button>
-                    </form>
-                  </>
-                )}
-              </div>
-            </div>
-          )}
-
-          {settings?.developerName && (
-            <div className="liquid-glass-strong rounded-2xl md:rounded-3xl p-4 md:p-6">
-              <div className="flex items-center gap-2 md:gap-3 mb-4 md:mb-5">
-                <div className="w-8 h-8 md:w-10 md:h-10 rounded-xl bg-amber/10 flex items-center justify-center text-amber flex-shrink-0">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" /></svg>
-                </div>
-                <h3 className="text-base md:text-lg font-bold text-charcoal">{t("dash.web_dev")}</h3>
-              </div>
-              <div className="flex flex-col sm:flex-row items-center gap-4 md:gap-6">
-                {(settings.developerPicture || devStudent?.profilePicture) ? (
-                  <img src={settings.developerPicture || devStudent?.profilePicture} alt={settings.developerName} className="w-20 h-20 md:w-24 md:h-24 rounded-full object-cover ring-4 ring-royal/20 shadow-xl flex-shrink-0" />
-                ) : (
-                  <div className="w-20 h-20 md:w-24 md:h-24 rounded-full gradient-royal flex items-center justify-center text-white text-2xl md:text-3xl font-bold ring-4 ring-royal/20 shadow-xl flex-shrink-0">{settings.developerName.charAt(0)}</div>
-                )}
-                <div className="text-center sm:text-left min-w-0">
-                  <h4 className="text-lg md:text-xl font-bold text-charcoal truncate">{settings.developerName}</h4>
-                  <p className="text-xs md:text-sm text-muted mt-1">{t("common.roll")} {settings.developerRoll || 6} • {t("site.class_section")}</p>
-                  {settings.developerBio && <p className="text-xs md:text-sm text-muted mt-1 break-words">{settings.developerBio}</p>}
-                  <div className="flex flex-wrap gap-1.5 md:gap-2 mt-2 md:mt-3 justify-center sm:justify-start">
-                    <span className="px-2.5 md:px-3 py-1 md:py-1.5 rounded-full md:rounded-xl text-[10px] md:text-xs font-bold bg-royal/10 text-royal flex items-center gap-1">
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="8" r="6" /><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11" /></svg>
-                      {t("common.rank")}: {devStudent?.rank ?? "—"}
-                    </span>
-                    {devStudent?.hasMarks && (
-                      <>
-                        <span className="px-2.5 md:px-3 py-1 md:py-1.5 rounded-full md:rounded-xl text-[10px] md:text-xs font-bold bg-emerald/10 text-emerald">{devStudent.totalObtained}/{devStudent.maxPossibleTotal}</span>
-                        <span className="px-2.5 md:px-3 py-1 md:py-1.5 rounded-full md:rounded-xl text-[10px] md:text-xs font-bold" style={{ backgroundColor: `${GRADE_COLORS[devStudent.overallGrade] || "#6B7280"}18`, color: GRADE_COLORS[devStudent.overallGrade] || "#6B7280" }}>{t("common.grade")}: {devStudent.overallGrade}</span>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
         </>
       )}
 
-      {/* Student Result Card Modal */}
-      {detailStudent && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" onClick={() => setDetailStudent(null)}>
-          <div className="absolute inset-0 bg-charcoal/50 backdrop-blur-sm" />
-          <div className="relative bg-white rounded-3xl max-w-lg w-full max-h-[85vh] overflow-y-auto shadow-2xl p-6 animate-scale-in" onClick={e => e.stopPropagation()}>
-            <button onClick={() => setDetailStudent(null)} className="absolute top-4 right-4 w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            </button>
-            <div className="text-center mb-5">
-              <div className="w-20 h-20 rounded-2xl gradient-royal flex items-center justify-center text-white text-3xl font-bold mx-auto mb-3 shadow-xl">{detailStudent.name.charAt(0)}</div>
-              <h2 className="text-xl font-bold text-charcoal">{detailStudent.name}</h2>
-              <p className="text-sm text-muted">Roll {detailStudent.rollNumber} · Rank #{detailStudent.rank || "—"} · GPA {detailStudent.gpa.toFixed(2)}</p>
-              <span className={`inline-block mt-1 px-3 py-0.5 rounded-full text-xs font-bold ${detailStudent.overallPass ? "bg-emerald/10 text-emerald" : "bg-crimson/10 text-crimson"}`}>{detailStudent.overallPass ? "PASS" : "FAIL"}</span>
-            </div>
-            <div className="grid grid-cols-4 gap-2 mb-4">
-              {[{l:"Total",v:`${detailStudent.totalObtained}/${detailStudent.maxPossibleTotal}`},{l:"Avg",v:`${detailStudent.average}%`},{l:"Grade",v:detailStudent.overallGrade},{l:"GPA",v:detailStudent.gpa.toFixed(2)}].map(s=>(
-                <div key={s.l} className="bg-slate-50 rounded-xl p-2 text-center"><p className="text-[9px] text-muted">{s.l}</p><p className="text-sm font-bold text-charcoal">{s.v}</p></div>
-              ))}
-            </div>
-            <h3 className="text-sm font-bold text-charcoal mb-2">Subject Marks</h3>
-            <div className="overflow-x-auto rounded-xl border border-border mb-4">
-              <table className="w-full text-xs"><thead><tr className="bg-slate-50"><th className="px-3 py-2 text-left font-semibold text-muted">Subject</th><th className="px-3 py-2 text-center font-semibold text-muted">Total</th><th className="px-3 py-2 text-center font-semibold text-muted">Grade</th><th className="px-3 py-2 text-center font-semibold text-muted">GP</th></tr></thead>
-              <tbody>{detailStudent.subjects.filter(x => x.total > 0).map(sub => (
-                <tr key={sub.subject} className="border-t border-border hover:bg-slate-50"><td className="px-3 py-2 font-medium">{sub.subject}</td><td className="px-3 py-2 text-center font-bold">{sub.total}/{sub.maxTotal}</td><td className="px-3 py-2 text-center font-bold" style={{color:GRADE_COLORS[sub.grade]||"#6B7280"}}>{sub.grade}</td><td className="px-3 py-2 text-center">—</td></tr>
-              ))}</tbody></table>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* STUDENT SPOTLIGHT DETAIL MODAL */}
+      <StudentDetailModal
+        student={detailStudent}
+        onClose={() => setDetailStudent(null)}
+        examType={examType}
+        schoolName={settings?.schoolName}
+      />
     </div>
-  );
-}
-
-function StatCard({ label, value, icon, color, bgColor }: { label: string; value: string | number; icon: React.ReactNode; color: string; bgColor: string; }) {
-  return (
-    <div className="liquid-glass rounded-xl md:rounded-2xl p-3 md:p-5 liquid-glass-hover">
-      <div className={`w-8 h-8 md:w-10 md:h-10 rounded-lg md:rounded-xl flex items-center justify-center mb-2 md:mb-3 ${bgColor} ${color}`}>{icon}</div>
-      <p className="text-lg md:text-2xl font-bold text-charcoal truncate">{value}</p>
-      <p className="text-[10px] md:text-xs text-muted mt-0.5 md:mt-1 truncate">{label}</p>
-    </div>
-  );
-}
-
-function PodiumCard({ student, position, height, bgClass }: { student: StudentResult; position: number; height: string; bgClass: string; }) {
-  const medals = ["🥇", "🥈", "🥉"];
-  return (
-    <div className="flex flex-col items-center min-w-0">
-      {student.profilePicture ? (
-        <img src={student.profilePicture} alt={student.name} className="w-12 h-12 sm:w-14 sm:h-14 md:w-20 md:h-20 rounded-full object-cover border-2 md:border-4 border-white shadow-lg mb-2 md:mb-3" />
-      ) : (
-        <div className="w-12 h-12 sm:w-14 sm:h-14 md:w-20 md:h-20 rounded-full gradient-royal flex items-center justify-center text-white text-base sm:text-lg md:text-2xl font-bold border-2 md:border-4 border-white shadow-lg mb-2 md:mb-3">{student.name.charAt(0)}</div>
-      )}
-      <span className="text-[11px] sm:text-xs md:text-base font-bold text-charcoal text-center truncate max-w-[70px] sm:max-w-[90px] md:max-w-[140px]">{student.name}</span>
-      <span className="text-[9px] sm:text-[10px] md:text-xs text-muted mb-1 md:mb-2">{/* Roll label */} {student.rollNumber}</span>
-      <div className={`${bgClass} ${height} w-14 sm:w-16 md:w-28 rounded-t-xl md:rounded-t-2xl flex flex-col items-center justify-start pt-1.5 md:pt-3 shadow-lg`}>
-        <span className="text-base sm:text-xl md:text-3xl">{medals[position - 1]}</span>
-        <span className="text-white text-[10px] sm:text-xs md:text-sm font-bold mt-0.5 md:mt-1">{student.totalObtained}</span>
-      </div>
-    </div>
-  );
-}
-
-function OverallLeaderboardTable({ students, type, maxTotal, onStudentClick }: { students: StudentResult[]; type: LeaderboardType; maxTotal: number; onStudentClick?: (s: StudentResult) => void }) {
-  const { t } = useI18n();
-
-  // Assign dense serial ranks: same score = same rank, next rank = prev rank + 1
-  const serialRanks = new Map<number, number>();
-  let cur = 1;
-  students.forEach((s, i) => {
-    if (i > 0) {
-      const prev = students[i-1];
-      if (type === "overall") {
-        if (prev.gpa !== s.gpa) cur++;
-        else if (prev.gpa === s.gpa && s.totalObtained < prev.totalObtained) cur++;
-      } else if (type === "cq") {
-        if (prev.totalCq !== s.totalCq) cur++;
-      } else if (type === "mcq") {
-        if (prev.totalMcq !== s.totalMcq) cur++;
-      }
-    }
-    serialRanks.set(s.studentId, cur);
-  });
-
-  const rankArrow = (displayRank: number, roll: number) => {
-    const rollPos = Math.ceil(roll / 2);
-    if (displayRank < rollPos) return <span className="text-emerald font-bold" title="Performing better than roll position">↑</span>;
-    if (displayRank > rollPos) return <span className="text-crimson font-bold" title="Performing below roll position">↓</span>;
-    return <span className="text-muted" title="Matching roll position">—</span>;
-  };
-
-  return (
-    <table className="w-full text-xs md:text-sm">
-      <thead>
-        <tr className="border-b border-white/30">
-          <th className="text-left text-[10px] md:text-xs font-semibold text-muted uppercase tracking-wider py-2 md:py-3 px-2 md:px-3">{t("common.rank")}</th>
-          <th className="text-left text-[10px] md:text-xs font-semibold text-muted uppercase tracking-wider py-2 md:py-3 px-2 md:px-3">{t("common.student")}</th>
-          <th className="text-left text-[10px] md:text-xs font-semibold text-muted uppercase tracking-wider py-2 md:py-3 px-2 md:px-3 hidden md:table-cell">{t("common.roll")}</th>
-          <th className="text-center text-[10px] md:text-xs font-semibold text-muted uppercase tracking-wider py-2 md:py-3 px-2 md:px-3">GPA</th>
-          <th className="text-right text-[10px] md:text-xs font-semibold text-muted uppercase tracking-wider py-2 md:py-3 px-2 md:px-3">{type === "cq" ? t("common.cq_total") : type === "mcq" ? t("common.mcq_total") : t("common.total")}</th>
-          <th className="text-center text-[10px] md:text-xs font-semibold text-muted uppercase tracking-wider py-2 md:py-3 px-2 md:px-3">{t("common.grade")}</th>
-        </tr>
-      </thead>
-      <tbody>
-        {students.map((s, i) => {
-          const getVal = () => { if (type === "cq") return s.totalCq; if (type === "mcq") return s.totalMcq; return s.totalObtained; };
-          const displayRank = serialRanks.get(s.studentId) || i + 1;
-          const isTop3 = displayRank <= 3;
-          return (
-            <motion.tr key={s.studentId}
-              onClick={() => onStudentClick?.(s)}
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.3, delay: i * 0.04 }}
-              className={`cursor-pointer border-b border-white/20 hover:bg-white/30 transition-colors ${i < 3 ? "font-medium" : ""}`}>
-              <td className="py-2 md:py-3 px-2 md:px-3">
-                <div className="flex items-center gap-1">
-                  <span className={`inline-flex items-center justify-center w-6 h-6 md:w-8 md:h-8 rounded-lg md:rounded-xl text-[11px] md:text-sm font-bold ${displayRank === 1 ? "bg-amber/15 text-amber" : displayRank === 2 ? "bg-gray-500/10 text-gray-500" : displayRank === 3 ? "bg-orange-500/15 text-orange-600" : "text-muted"}`}>
-                    {isTop3 ? ["🥇","🥈","🥉"][displayRank-1] : `#${displayRank}`}
-                  </span>
-                  {type === "overall" && rankArrow(displayRank, s.rollNumber)}
-                </div>
-              </td>
-              <td className="py-2 md:py-3 px-2 md:px-3"><div className="flex items-center gap-2"><div className="hidden sm:flex w-6 h-6 md:w-8 md:h-8 rounded-full gradient-royal items-center justify-center text-white text-[10px] md:text-xs font-bold ring-1 md:ring-2 ring-white/50 flex-shrink-0">{s.name.charAt(0)}</div><span className="text-xs md:text-sm font-medium text-charcoal truncate max-w-[90px] sm:max-w-none hover:underline">{s.name}</span></div></td>
-              <td className="py-2 md:py-3 px-2 md:px-3 text-[11px] md:text-sm text-muted hidden md:table-cell">{s.rollNumber}</td>
-              <td className="py-2 md:py-3 px-2 md:px-3 text-center">
-                <span className={`text-xs md:text-sm font-bold ${s.gpa >= 5 ? "text-emerald" : s.gpa >= 4 ? "text-royal" : s.gpa >= 3 ? "text-amber" : s.gpa >= 2 ? "text-orange-500" : s.gpa > 0 ? "text-crimson" : "text-gray-400"}`}>{s.gpa.toFixed(2)}</span>
-              </td>
-              <td className="py-2 md:py-3 px-2 md:px-3 text-right text-xs md:text-sm font-semibold text-charcoal">{getVal()}<span className="text-muted font-normal hidden sm:inline">/{maxTotal}</span></td>
-              <td className="py-2 md:py-3 px-2 md:px-3 text-center"><span className="px-1.5 md:px-2.5 py-0.5 md:py-1 rounded-lg md:rounded-xl text-[10px] md:text-xs font-bold" style={{ backgroundColor: `${GRADE_COLORS[s.overallGrade] || "#6B7280"}18`, color: GRADE_COLORS[s.overallGrade] || "#6B7280" }}>{s.overallGrade}</span></td>
-            </motion.tr>
-          );
-        })}
-      </tbody>
-    </table>
-  );
-}
-
-function AttendanceLeaderboardTable({ students }: { students: AttendanceLeaderboardEntry[] }) {
-  const { t } = useI18n();
-
-  // Dense serial rank: ties on percentage (then streak) share a rank.
-  const ranks = new Map<number, number>();
-  let cur = 1;
-  students.forEach((s, i) => {
-    if (i > 0) {
-      const prev = students[i - 1];
-      if (prev.percentage !== s.percentage || prev.currentStreak !== s.currentStreak) cur++;
-    }
-    ranks.set(s.studentId, cur);
-  });
-
-  return (
-    <table className="w-full text-xs md:text-sm">
-      <thead>
-        <tr className="border-b border-white/30">
-          <th className="text-left text-[10px] md:text-xs font-semibold text-muted uppercase tracking-wider py-2 md:py-3 px-2 md:px-3">{t("common.rank")}</th>
-          <th className="text-left text-[10px] md:text-xs font-semibold text-muted uppercase tracking-wider py-2 md:py-3 px-2 md:px-3">{t("common.student")}</th>
-          <th className="text-left text-[10px] md:text-xs font-semibold text-muted uppercase tracking-wider py-2 md:py-3 px-2 md:px-3 hidden md:table-cell">{t("common.roll")}</th>
-          <th className="text-center text-[10px] md:text-xs font-semibold text-muted uppercase tracking-wider py-2 md:py-3 px-2 md:px-3">🔥 Streak</th>
-          <th className="text-right text-[10px] md:text-xs font-semibold text-muted uppercase tracking-wider py-2 md:py-3 px-2 md:px-3">Present</th>
-          <th className="text-right text-[10px] md:text-xs font-semibold text-muted uppercase tracking-wider py-2 md:py-3 px-2 md:px-3">Rate</th>
-        </tr>
-      </thead>
-      <tbody>
-        {students.map((s, i) => {
-          const displayRank = ranks.get(s.studentId) || i + 1;
-          const isTop3 = displayRank <= 3;
-          return (
-            <motion.tr key={s.studentId}
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.3, delay: i * 0.04 }}
-              className={`border-b border-white/20 hover:bg-white/30 transition-colors ${i < 3 ? "font-medium" : ""}`}>
-              <td className="py-2 md:py-3 px-2 md:px-3">
-                <span className={`inline-flex items-center justify-center w-6 h-6 md:w-8 md:h-8 rounded-lg md:rounded-xl text-[11px] md:text-sm font-bold ${displayRank === 1 ? "bg-amber/15 text-amber" : displayRank === 2 ? "bg-gray-500/10 text-gray-500" : displayRank === 3 ? "bg-orange-500/15 text-orange-600" : "text-muted"}`}>
-                  {isTop3 ? ["🥇", "🥈", "🥉"][displayRank - 1] : `#${displayRank}`}
-                </span>
-              </td>
-              <td className="py-2 md:py-3 px-2 md:px-3">
-                <div className="flex items-center gap-2">
-                  <div className="hidden sm:flex w-6 h-6 md:w-8 md:h-8 rounded-full gradient-royal items-center justify-center text-white text-[10px] md:text-xs font-bold ring-1 md:ring-2 ring-white/50 flex-shrink-0">
-                    {s.name.charAt(0)}
-                  </div>
-                  <span className="text-xs md:text-sm font-medium text-charcoal truncate max-w-[90px] sm:max-w-none">{s.name}</span>
-                </div>
-              </td>
-              <td className="py-2 md:py-3 px-2 md:px-3 text-[11px] md:text-sm text-muted hidden md:table-cell">{s.rollNumber}</td>
-              <td className="py-2 md:py-3 px-2 md:px-3 text-center text-xs md:text-sm font-bold text-charcoal">{s.currentStreak}</td>
-              <td className="py-2 md:py-3 px-2 md:px-3 text-right text-xs md:text-sm font-semibold text-charcoal">{s.presentDays}<span className="text-muted font-normal">/{s.totalDays}</span></td>
-              <td className="py-2 md:py-3 px-2 md:px-3 text-right">
-                <span className={`text-xs md:text-sm font-bold ${s.percentage >= 90 ? "text-emerald" : s.percentage >= 75 ? "text-royal" : s.percentage >= 50 ? "text-amber" : "text-crimson"}`}>{s.percentage}%</span>
-              </td>
-            </motion.tr>
-          );
-        })}
-      </tbody>
-    </table>
-  );
-}
-
-function SubjectLeaderboardTable({ students, subject, onStudentClick }: { students: StudentResult[]; subject: string; onStudentClick?: (s: StudentResult) => void }) {
-  const { t } = useI18n();
-  return (
-    <table className="w-full text-xs md:text-sm">
-      <thead>
-        <tr className="border-b border-white/30">
-          <th className="text-left text-[10px] md:text-xs font-semibold text-muted uppercase tracking-wider py-2 md:py-3 px-2 md:px-3">{t("common.rank")}</th>
-          <th className="text-left text-[10px] md:text-xs font-semibold text-muted uppercase tracking-wider py-2 md:py-3 px-2 md:px-3">{t("common.student")}</th>
-          <th className="text-right text-[10px] md:text-xs font-semibold text-muted uppercase tracking-wider py-2 md:py-3 px-2">CQ</th>
-          <th className="text-right text-[10px] md:text-xs font-semibold text-muted uppercase tracking-wider py-2 md:py-3 px-2">MCQ</th>
-          <th className="text-right text-[10px] md:text-xs font-semibold text-muted uppercase tracking-wider py-2 md:py-3 px-2 md:px-3">{t("common.total")}</th>
-          <th className="text-center text-[10px] md:text-xs font-semibold text-muted uppercase tracking-wider py-2 md:py-3 px-2 md:px-3">{t("common.grade")}</th>
-        </tr>
-      </thead>
-      <tbody>
-        {students.map((s) => {
-          const mark = s.subjects.find((x) => x.subject === subject);
-          return (
-            <motion.tr key={s.studentId}
-              onClick={() => onStudentClick?.(s)}
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.3, delay: students.indexOf(s) * 0.04 }}
-              className="cursor-pointer border-b border-white/20 hover:bg-white/30 transition-colors">
-              <td className="py-2 md:py-3 px-2 md:px-3 text-xs font-bold text-charcoal">{s.subjectRanks[subject] ?? "-"}</td>
-              <td className="py-2 md:py-3 px-2 md:px-3"><div className="flex items-center gap-2"><div className="hidden sm:flex w-6 h-6 md:w-8 md:h-8 rounded-full gradient-royal items-center justify-center text-white text-[10px] md:text-xs font-bold flex-shrink-0">{s.name.charAt(0)}</div><span className="text-xs md:text-sm font-medium truncate max-w-[80px] sm:max-w-none hover:underline">{s.name}</span></div></td>
-              <td className="py-2 md:py-3 px-2 text-right text-[11px] md:text-sm text-muted">{mark?.cq ?? 0}</td>
-              <td className="py-2 md:py-3 px-2 text-right text-[11px] md:text-sm text-muted">{mark?.mcq ?? 0}</td>
-              <td className="py-2 md:py-3 px-2 md:px-3 text-right text-xs font-semibold">{mark?.total ?? 0}</td>
-              <td className="py-2 md:py-3 px-2 md:px-3 text-center"><span className="px-1.5 md:px-2.5 py-0.5 md:py-1 rounded-lg text-[10px] md:text-xs font-bold" style={{ backgroundColor: `${GRADE_COLORS[mark?.grade || "F"] || "#6B7280"}18`, color: GRADE_COLORS[mark?.grade || "F"] || "#6B7280" }}>{mark?.grade || "N/A"}</span></td>
-            </motion.tr>
-          );
-        })}
-      </tbody>
-    </table>
   );
 }

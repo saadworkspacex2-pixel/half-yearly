@@ -32,16 +32,17 @@ export function StudyMaterials() {
   const filtered = filter === "all" ? items : items.filter(i => i.subject === filter);
 
   return (
-    <div className="liquid-glass rounded-2xl md:rounded-3xl p-4 md:p-6">
-      <div className="flex items-center gap-2 md:gap-3 mb-4 md:mb-5">
-        <div className="w-8 h-8 md:w-10 md:h-10 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-600 flex-shrink-0">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="md:w-[18px] md:h-[18px]">
-            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+    <div className="liquid-glass-strong rounded-3xl p-5 md:p-6 border border-white/10 shadow-xl">
+      <div className="flex items-center gap-3 mb-4 md:mb-5">
+        <div className="w-9 h-9 md:w-10 md:h-10 rounded-2xl bg-purple-500/20 text-purple-400 flex items-center justify-center border border-purple-500/30 flex-shrink-0">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
           </svg>
         </div>
         <div className="min-w-0">
-          <h3 className="text-base md:text-lg font-bold text-charcoal">{lang === "bn" ? "📚 শিক্ষা সামগ্রী" : "📚 Study Materials"}</h3>
-          <p className="text-[10px] md:text-xs text-muted truncate">{lang === "bn" ? "নোট, পিডিএফ, ভিডিও ও লিংক" : "Notes, PDFs, Videos & Links"}</p>
+          <h3 className="text-base md:text-lg font-bold text-white tracking-tight">{lang === "bn" ? "📚 শিক্ষা সামগ্রী" : "📚 Study Materials"}</h3>
+          <p className="text-xs text-slate-400 truncate">{lang === "bn" ? "নোট, পিডিএফ, ভিডিও ও লিংক" : "Notes, PDFs, Videos & Links"}</p>
         </div>
       </div>
 

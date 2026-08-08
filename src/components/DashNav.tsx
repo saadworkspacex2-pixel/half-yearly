@@ -84,15 +84,15 @@ export default function DashNav() {
             title={label}
             className={`relative flex items-center justify-center p-2.5 md:p-3 rounded-full transition-colors duration-300 z-10 group ${
               isActive 
-                ? "text-[#14140F]" 
-                : "text-white/50 hover:text-white/80"
+                ? "text-white font-bold" 
+                : "text-slate-400 hover:text-white"
             }`}
           >
             {/* Active Highlight Background Pill */}
             {isActive && (
               <motion.div
                 layoutId="active-nav-indicator"
-                className="absolute inset-0 bg-[#D7FF3E] rounded-full -z-10"
+                className="absolute inset-0 bg-indigo-600 rounded-full shadow-lg shadow-indigo-600/40 -z-10"
                 transition={{ type: "spring", stiffness: 350, damping: 30 }}
               />
             )}
