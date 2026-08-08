@@ -7,6 +7,7 @@ import {
   timestamp,
   boolean,
   jsonb,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 export const settings = pgTable("settings", {
@@ -30,13 +31,13 @@ export const settings = pgTable("settings", {
   captainTitle: text("captain_title").default("Captain"),
   monitorRoll: integer("monitor_roll"),
   monitorTitle: text("monitor_title").default("Monitor"),
+  publicDashboardExamType: text("public_dashboard_exam_type").default("Half Yearly"),
 });
 
 export const students = pgTable("students", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   rollNumber: integer("roll_number").notNull().unique(),
-  section: text("section").default("dahlia").notNull(), // shapla or dahlia
   password: text("password").notNull(),
   profilePicture: text("profile_picture").default(""),
   fatherName: text("father_name").default(""),
@@ -165,6 +166,34 @@ export const pendingChanges = pgTable("pending_changes", {
   status: text("status").default("pending").notNull(), // pending, approved, rejected
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+export const homework = pgTable("homework", {
+  id: serial("id").primaryKey(),
+  subject: text("subject").notNull(),
+  title: text("title").notNull(),
+  description: text("description").default(""),
+  dueDate: text("due_date").default(""),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// One row per student per school day. "status" is either "present" or "absent" —
+// weekends (Fri/Sat) are never written here, they're derived at read-time instead.
+export const attendance = pgTable(
+  "attendance",
+  {
+    id: serial("id").primaryKey(),
+    studentId: integer("student_id").notNull(),
+    rollNumber: integer("roll_number").notNull(),
+    date: text("date").notNull(), // "YYYY-MM-DD", Asia/Dhaka calendar date
+    status: text("status").notNull(), // present | absent
+    markedBy: text("marked_by").default("admin"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("attendance_date_roll_idx").on(table.date, table.rollNumber),
+  ]
+);
 
 export const auditLogs = pgTable("audit_logs", {
   id: serial("id").primaryKey(),

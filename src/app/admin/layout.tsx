@@ -65,6 +65,15 @@ const navItems = [
     ),
   },
   {
+    href: "/admin/attendance",
+    label: "Attendance",
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /><path d="M9 16l2 2 4-4" />
+      </svg>
+    ),
+  },
+  {
     href: "/admin/reports",
     label: "Reports",
     icon: (
@@ -124,6 +133,15 @@ const navItems = [
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+      </svg>
+    ),
+  },
+  {
+    href: "/admin/homework",
+    label: "Homework",
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
       </svg>
     ),
   },
@@ -209,21 +227,21 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
       {/* Sidebar */}
       <aside
-        className={`fixed lg:sticky top-0 left-0 h-screen w-[260px] liquid-glass-strong flex flex-col z-50 transition-transform duration-300 ${
+        className={`fixed lg:sticky top-0 left-0 h-screen w-[260px] bg-sidebar flex flex-col z-50 transition-transform duration-300 ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         }`}
       >
-        <div className="p-6 border-b border-white/20">
+        <div className="p-6 border-b border-white/10">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl gradient-royal flex items-center justify-center shadow-lg shadow-royal/25">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <div className="w-10 h-10 rounded-2xl bg-accent flex items-center justify-center shadow-lg shadow-black/20">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#14140F" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
                 <path d="M6 12v5c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2v-5" />
               </svg>
             </div>
             <div>
-              <h1 className="text-sm font-bold text-charcoal">Class -VIII</h1>
-              <p className={`text-xs font-semibold ${adminRole === "admin" ? "text-emerald" : "text-amber"}`}>
+              <h1 className="text-sm font-bold text-white">Class -VIII</h1>
+              <p className={`text-xs font-semibold ${adminRole === "admin" ? "text-accent" : "text-amber"}`}>
                 {adminRole === "admin" ? "⚡ Super Admin" : "🔒 Secondary Admin"}
               </p>
             </div>
@@ -240,8 +258,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                 onClick={() => { setSidebarOpen(false); playNav(); }}
                 className={`flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all ${
                   isActive
-                    ? "gradient-royal text-white shadow-lg shadow-royal/25"
-                    : "text-muted hover:bg-white/40 hover:text-charcoal"
+                    ? "bg-accent text-[#14140F] shadow-lg shadow-black/20"
+                    : "text-white/55 hover:bg-white/10 hover:text-white"
                 }`}
               >
                 {item.icon}
@@ -256,8 +274,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
               onClick={() => { setSidebarOpen(false); playNav(); }}
               className={`flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all ${
                 pathname === "/admin/approvals"
-                  ? "gradient-royal text-white shadow-lg shadow-royal/25"
-                  : "text-muted hover:bg-white/40 hover:text-charcoal"
+                  ? "bg-accent text-[#14140F] shadow-lg shadow-black/20"
+                  : "text-white/55 hover:bg-white/10 hover:text-white"
               }`}
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -271,10 +289,10 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           )}
         </nav>
 
-        <div className="p-4 border-t border-white/20">
+        <div className="p-4 border-t border-white/10">
           <Link
             href="/"
-            className="flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium text-muted hover:bg-white/40 hover:text-charcoal transition-all mb-1"
+            className="flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium text-white/55 hover:bg-white/10 hover:text-white transition-all mb-1"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10" /><line x1="2" y1="12" x2="22" y2="12" /><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
@@ -283,7 +301,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           </Link>
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium text-crimson hover:bg-crimson/10 transition-all"
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium text-red-400 hover:bg-red-500/10 transition-all"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" />
@@ -299,7 +317,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         <header className="sticky top-0 z-30 liquid-glass px-6 py-4 flex items-center justify-between">
           <button
             onClick={() => { setSidebarOpen(true); playClick(); }}
-            className="lg:hidden p-2 rounded-xl hover:bg-white/40 transition-colors"
+            className="lg:hidden p-2 rounded-xl hover:bg-black/5 transition-colors"
           >
             <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <path d="M4 6h16M4 12h16M4 18h16" />

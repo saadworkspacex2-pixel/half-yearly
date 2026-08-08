@@ -69,8 +69,8 @@ export default function DashNav() {
                  bottom-4 left-3 right-3 flex flex-row items-center justify-between px-3 py-2.5 rounded-[2rem]
                  /* PC Layout: Left Vertical Sidebar */
                  md:bottom-auto md:top-1/2 md:-translate-y-1/2 md:left-6 md:right-auto md:flex-col md:justify-center md:gap-3 md:px-3 md:py-4 md:rounded-[2.5rem]
-                 /* Premium Dark Glassmorphism */
-                 bg-slate-900/95 backdrop-blur-xl border border-white/10 shadow-[0_12px_40px_rgba(0,0,0,0.4)]"
+                 /* Ink surface — matches the new sidebar/CTA black across the site */
+                 bg-[#111309]/95 backdrop-blur-xl border border-white/10 shadow-[0_12px_40px_rgba(0,0,0,0.4)]"
     >
       {sections.map((s) => {
         const isActive = active === s.id;
@@ -84,15 +84,15 @@ export default function DashNav() {
             title={label}
             className={`relative flex items-center justify-center p-2.5 md:p-3 rounded-full transition-colors duration-300 z-10 group ${
               isActive 
-                ? "text-indigo-300" 
-                : "text-slate-400 hover:text-slate-200"
+                ? "text-[#14140F]" 
+                : "text-white/50 hover:text-white/80"
             }`}
           >
             {/* Active Highlight Background Pill */}
             {isActive && (
               <motion.div
                 layoutId="active-nav-indicator"
-                className="absolute inset-0 bg-indigo-500/20 md:bg-white/10 rounded-full -z-10"
+                className="absolute inset-0 bg-[#D7FF3E] rounded-full -z-10"
                 transition={{ type: "spring", stiffness: 350, damping: 30 }}
               />
             )}

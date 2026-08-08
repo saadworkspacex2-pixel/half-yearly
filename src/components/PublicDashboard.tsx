@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { EXAM_TYPES, SUBJECTS, GRADE_COLORS } from "@/lib/constants";
+import { motion } from "framer-motion";
 import { GalleryShowcase, WeeklyRoutineTable } from "@/components/BentoWidgets";
 import { StudyMaterials, UpcomingEvents, MarkFinder } from "@/components/StudentWidgets";
 import { useI18n } from "@/lib/i18n";
@@ -34,6 +35,7 @@ interface StudentResult {
   totalMcq: number;
   subjects: SubjectResult[];
   subjectRanks: Record<string, number | null>;
+  gpa: number;
   hasMarks: boolean;
 }
 
@@ -85,13 +87,31 @@ interface StudentInfo {
 
 type LeaderboardType = "overall" | "cq" | "mcq";
 
+interface AttendanceLeaderboardEntry {
+  studentId: number;
+  name: string;
+  rollNumber: number;
+  profilePicture: string;
+  totalDays: number;
+  presentDays: number;
+  absentDays: number;
+  percentage: number;
+  currentStreak: number;
+  longestStreak: number;
+}
+
 export default function PublicDashboard() {
   const { t, lang, tSubject, tExam } = useI18n();
-  const [examType, setExamType] = useState<string>("Half Yearly");
+  const [examType, setExamType] = useState<string>("");
+
+  // Only start loading results once examType is confirmed (from settings or default)
+  const [examReady, setExamReady] = useState(false);
   const [results, setResults] = useState<StudentResult[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [leaderboardType, setLeaderboardType] = useState<LeaderboardType>("overall");
+  const [attendanceLeaderboard, setAttendanceLeaderboard] = useState<AttendanceLeaderboardEntry[]>([]);
+  const [attendanceLoading, setAttendanceLoading] = useState(true);
   const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [teachers, setTeachers] = useState<Teacher[]>([]);
@@ -104,6 +124,7 @@ export default function PublicDashboard() {
   });
   const [submitting, setSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [detailStudent, setDetailStudent] = useState<StudentResult | null>(null);
 
   useEffect(() => {
     fetch("/api/students")
@@ -111,17 +132,35 @@ export default function PublicDashboard() {
       .then((d) => setAllStudents(Array.isArray(d) ? d : []))
       .catch(() => {});
 
+    // Fetch settings FIRST, then set examType and mark ready
     fetch("/api/settings")
       .then((r) => r.json())
-      .then((d) => setSettings(d))
-      .catch(() => {});
+      .then((d) => {
+        setSettings(d);
+        const savedExam = (d as any).publicDashboardExamType || "Half Yearly";
+        setExamType(savedExam);
+        setExamReady(true);
+      })
+      .catch(() => {
+        // Fallback to default if settings fail
+        setExamType("Half Yearly");
+        setExamReady(true);
+      });
     fetch("/api/teachers")
       .then((r) => r.json())
       .then((d) => setTeachers(Array.isArray(d) ? d : []))
       .catch(() => {});
+
+    fetch("/api/attendance/leaderboard")
+      .then((r) => r.json())
+      .then((d) => setAttendanceLeaderboard(Array.isArray(d.leaderboard) ? d.leaderboard : []))
+      .catch(() => {})
+      .finally(() => setAttendanceLoading(false));
   }, []);
 
+  // Fetch results only when examType is fully resolved
   useEffect(() => {
+    if (!examReady || !examType) return;
     setLoading(true);
     fetch(`/api/results?examType=${encodeURIComponent(examType)}`)
       .then((r) => r.json())
@@ -131,13 +170,16 @@ export default function PublicDashboard() {
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, [examType]);
+  }, [examReady, examType]);
 
+  // Sort by GPA descending; ties broken by total obtained
   const ranked = results
     .filter((r) => r.hasMarks)
     .sort((a, b) => {
       if (leaderboardType === "cq") return b.totalCq - a.totalCq;
       if (leaderboardType === "mcq") return b.totalMcq - a.totalMcq;
+      // Overall: sort by GPA first, then total marks
+      if (b.gpa !== a.gpa) return b.gpa - a.gpa;
       return b.totalObtained - a.totalObtained;
     });
 
@@ -153,7 +195,7 @@ export default function PublicDashboard() {
     ? ranked.filter((r) => r.name.toLowerCase().includes(searchQuery.toLowerCase()) || r.rollNumber.toString().includes(searchQuery))
     : ranked;
 
-  const top3 = ranked.slice(0, 3);
+  const top5 = ranked.slice(0, 5);
   const devRoll = settings?.developerRoll || 6;
   const devStudent = results.find((r) => r.rollNumber === devRoll);
 
@@ -286,19 +328,70 @@ export default function PublicDashboard() {
             <UpcomingEvents />
           </div>
 
-          {/* Podium */}
-          {top3.length >= 3 && (
-            <div className="liquid-glass-strong rounded-2xl md:rounded-3xl p-4 md:p-8 overflow-hidden">
-              <div className="flex items-center gap-2 md:gap-3 justify-center mb-5 md:mb-8">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" strokeWidth="2" className="md:w-6 md:h-6"><circle cx="12" cy="8" r="6" /><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11" /></svg>
-                <h3 className="text-lg md:text-2xl font-bold text-charcoal">{t("dash.top_performers")}</h3>
+          {/* ── TOP 5 PREMIUM PODIUM ── */}
+          {top5.length >= 3 && (
+            <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}
+              className="bg-white rounded-[2rem] sm:rounded-[2.5rem] md:rounded-[3.5rem] p-4 sm:p-6 md:p-10 shadow-[0_8px_40px_rgba(0,0,0,0.06)] overflow-hidden"
+            >
+              {/* Header */}
+              <div className="flex items-center gap-3 justify-center mb-8 md:mb-10">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 rounded-xl sm:rounded-2xl bg-amber-50 flex items-center justify-center shrink-0">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" strokeWidth="2" className="sm:w-[18px] sm:h-[18px] md:w-6 md:h-6"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
+                </div>
+                <h3 className="text-base sm:text-lg md:text-2xl font-extrabold text-charcoal tracking-tight">{t("dash.top_performers")}</h3>
               </div>
-              <div className="flex items-end justify-center gap-2 sm:gap-4 md:gap-8">
-                <PodiumCard student={top3[1]} position={2} height="h-20 sm:h-28 md:h-32" bgClass="podium-silver" />
-                <PodiumCard student={top3[0]} position={1} height="h-28 sm:h-36 md:h-44" bgClass="podium-gold" />
-                <PodiumCard student={top3[2]} position={3} height="h-16 sm:h-20 md:h-24" bgClass="podium-bronze" />
+
+              {/* Scrollable wrapper with edge padding for ultra-narrow screens */}
+              <div className="w-full max-w-full overflow-x-auto snap-x snap-mandatory scrollbar-hide px-4 sm:overflow-visible sm:px-0">
+                {/* Visual order: 5th | 3rd | 1st | 2nd | 4th */}
+                <div className="flex flex-row items-end justify-center gap-1 sm:gap-2 md:gap-3 min-w-[350px] sm:min-w-0 mx-auto sm:max-w-3xl pb-2">
+                {[4, 2, 0, 1, 3].map((idx, col) => {
+                  const s = top5[idx];
+                  if (!s) return <div key={`e-${col}`} className="w-[65px] sm:min-w-[90px] flex-1 shrink-0" />;
+                  const rankTexts = ["1st","2nd","3rd","4th","5th"];
+                  const rankCols: Record<string, string> = { "1st": "text-amber-600", "2nd": "text-slate-500", "3rd": "text-orange-600", "4th": "text-blue-500", "5th": "text-emerald-500" };
+                  const configs: Record<number, { ring: string; icon: string; card: string; border: string; pad: string }> = {
+                    0: { ring: "#fbbf24", icon: "#f59e0b", card: "bg-gradient-to-b from-amber-50 to-amber-100/80", border: "border-amber-200/60", pad: "pb-4 sm:pb-8 md:pb-12" },
+                    1: { ring: "#94a3b8", icon: "#64748b", card: "bg-gradient-to-b from-slate-50 to-slate-100/80", border: "border-slate-200/60", pad: "pb-3 sm:pb-6 md:pb-10" },
+                    2: { ring: "#fb923c", icon: "#ea580c", card: "bg-gradient-to-b from-orange-50 to-orange-100/80", border: "border-orange-200/60", pad: "pb-2 sm:pb-5 md:pb-8" },
+                    3: { ring: "#60a5fa", icon: "#3b82f6", card: "bg-gradient-to-b from-blue-50 to-blue-100/80", border: "border-blue-200/60", pad: "pb-2 sm:pb-4 md:pb-6" },
+                    4: { ring: "#34d399", icon: "#10b981", card: "bg-gradient-to-b from-emerald-50 to-emerald-100/80", border: "border-emerald-200/60", pad: "pb-1 sm:pb-3 md:pb-4" },
+                  };
+                  const c = configs[idx];
+                  return (
+                    <motion.div key={s.studentId}
+                      initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: col * 0.06 }}
+                      className="flex flex-col items-center gap-0.5 sm:gap-2 cursor-pointer group snap-center shrink-0 flex-1 max-w-[72px] sm:max-w-none min-w-0"
+                      onClick={() => setDetailStudent(s)}>
+                      {/* 1. Avatar with glowing ring */}
+                      <motion.div whileHover={{ scale: 1.08, y: -4 }}
+                        className="w-10 h-10 sm:w-14 sm:h-14 md:w-16 md:h-16 rounded-full bg-white shadow-md flex items-center justify-center shrink-0"
+                        style={{ border: `3px solid ${c.ring}` }}>
+                        {s.profilePicture ? <img src={s.profilePicture} alt="" className="w-full h-full rounded-full object-cover" />
+                          : <span className="text-xs sm:text-base md:text-lg font-bold bg-gradient-to-br from-royal to-purple-600 bg-clip-text text-transparent">{s.name.charAt(0)}</span>}
+                      </motion.div>
+                      {/* 2. Name + Roll */}
+                      <div className="flex flex-col items-center gap-0 shrink-0">
+                        <p className="text-[9px] sm:text-xs font-bold text-charcoal text-center truncate w-full max-w-[68px] sm:max-w-[100px]">{s.name}</p>
+                        <p className="text-[7px] sm:text-[10px] text-muted">R{s.rollNumber}</p>
+                      </div>
+                      {/* 3. Glassmorphic Rank Card */}
+                      <div className={`w-full rounded-xl sm:rounded-2xl ${c.card} ${c.border} border shadow-md backdrop-blur-sm flex flex-col items-center justify-center gap-0.5 px-1 sm:px-2 pt-1.5 sm:pt-3 ${c.pad} transition-all duration-300 group-hover:shadow-lg group-hover:-translate-y-1`}>
+                        {/* Rank medal SVG */}
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={c.icon} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="sm:w-5 sm:h-5 md:w-6 md:h-6 shrink-0">
+                          <circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/>
+                        </svg>
+                        {/* Rank text */}
+                        <span className={`text-[8px] sm:text-[10px] md:text-xs font-extrabold tracking-wide ${rankCols[rankTexts[idx]] || "text-muted"}`}>{rankTexts[idx]}</span>
+                        <span className="text-[9px] sm:text-xs md:text-sm font-extrabold text-charcoal">{s.totalObtained}</span>
+                        <span className={`text-[7px] sm:text-[10px] md:text-xs font-bold ${s.gpa >= 5 ? "text-emerald" : s.gpa >= 4 ? "text-royal" : "text-amber"}`}>GPA {s.gpa.toFixed(2)}</span>
+                      </div>
+                    </motion.div>
+                  );
+                })}
               </div>
-            </div>
+              </div>
+            </motion.div>
           )}
 
           {/* Leaderboard */}
@@ -340,9 +433,34 @@ export default function PublicDashboard() {
 
             <div className="overflow-x-auto -mx-4 md:mx-0 px-4 md:px-0">
               <div className="min-w-[320px]">
-                {selectedSubject ? <SubjectLeaderboardTable students={subjectRanked} subject={selectedSubject} /> : <OverallLeaderboardTable students={filtered} type={leaderboardType} maxTotal={stats?.maxPossibleTotal || 0} />}
+                {selectedSubject ? <SubjectLeaderboardTable students={subjectRanked} subject={selectedSubject} onStudentClick={setDetailStudent} /> : <OverallLeaderboardTable students={filtered} type={leaderboardType} maxTotal={stats?.maxPossibleTotal || 0} onStudentClick={setDetailStudent} />}
               </div>
             </div>
+          </div>
+
+          {/* Attendance Leaderboard */}
+          <div id="attendance-leaderboard" className="liquid-glass-strong rounded-2xl md:rounded-3xl p-4 md:p-6 overflow-hidden">
+            <div className="flex items-center gap-2 md:gap-3 min-w-0 mb-4 md:mb-6">
+              <div className="w-8 h-8 md:w-10 md:h-10 rounded-xl bg-emerald/10 flex items-center justify-center text-emerald flex-shrink-0">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-base md:text-xl font-bold text-charcoal truncate">{t("dash.attendance_leaderboard")}</h3>
+                <p className="text-[11px] md:text-sm text-muted truncate">{t("dash.attendance_rankings")}</p>
+              </div>
+            </div>
+
+            {attendanceLoading ? (
+              <div className="h-40 rounded-2xl skeleton" />
+            ) : attendanceLeaderboard.length === 0 ? (
+              <div className="text-center py-10 text-sm text-muted">{t("dash.no_attendance_data")}</div>
+            ) : (
+              <div className="overflow-x-auto -mx-4 md:mx-0 px-4 md:px-0">
+                <div className="min-w-[320px]">
+                  <AttendanceLeaderboardTable students={attendanceLeaderboard} />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Subject Performance */}
@@ -606,6 +724,36 @@ export default function PublicDashboard() {
           )}
         </>
       )}
+
+      {/* Student Result Card Modal */}
+      {detailStudent && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" onClick={() => setDetailStudent(null)}>
+          <div className="absolute inset-0 bg-charcoal/50 backdrop-blur-sm" />
+          <div className="relative bg-white rounded-3xl max-w-lg w-full max-h-[85vh] overflow-y-auto shadow-2xl p-6 animate-scale-in" onClick={e => e.stopPropagation()}>
+            <button onClick={() => setDetailStudent(null)} className="absolute top-4 right-4 w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+            <div className="text-center mb-5">
+              <div className="w-20 h-20 rounded-2xl gradient-royal flex items-center justify-center text-white text-3xl font-bold mx-auto mb-3 shadow-xl">{detailStudent.name.charAt(0)}</div>
+              <h2 className="text-xl font-bold text-charcoal">{detailStudent.name}</h2>
+              <p className="text-sm text-muted">Roll {detailStudent.rollNumber} · Rank #{detailStudent.rank || "—"} · GPA {detailStudent.gpa.toFixed(2)}</p>
+              <span className={`inline-block mt-1 px-3 py-0.5 rounded-full text-xs font-bold ${detailStudent.overallPass ? "bg-emerald/10 text-emerald" : "bg-crimson/10 text-crimson"}`}>{detailStudent.overallPass ? "PASS" : "FAIL"}</span>
+            </div>
+            <div className="grid grid-cols-4 gap-2 mb-4">
+              {[{l:"Total",v:`${detailStudent.totalObtained}/${detailStudent.maxPossibleTotal}`},{l:"Avg",v:`${detailStudent.average}%`},{l:"Grade",v:detailStudent.overallGrade},{l:"GPA",v:detailStudent.gpa.toFixed(2)}].map(s=>(
+                <div key={s.l} className="bg-slate-50 rounded-xl p-2 text-center"><p className="text-[9px] text-muted">{s.l}</p><p className="text-sm font-bold text-charcoal">{s.v}</p></div>
+              ))}
+            </div>
+            <h3 className="text-sm font-bold text-charcoal mb-2">Subject Marks</h3>
+            <div className="overflow-x-auto rounded-xl border border-border mb-4">
+              <table className="w-full text-xs"><thead><tr className="bg-slate-50"><th className="px-3 py-2 text-left font-semibold text-muted">Subject</th><th className="px-3 py-2 text-center font-semibold text-muted">Total</th><th className="px-3 py-2 text-center font-semibold text-muted">Grade</th><th className="px-3 py-2 text-center font-semibold text-muted">GP</th></tr></thead>
+              <tbody>{detailStudent.subjects.filter(x => x.total > 0).map(sub => (
+                <tr key={sub.subject} className="border-t border-border hover:bg-slate-50"><td className="px-3 py-2 font-medium">{sub.subject}</td><td className="px-3 py-2 text-center font-bold">{sub.total}/{sub.maxTotal}</td><td className="px-3 py-2 text-center font-bold" style={{color:GRADE_COLORS[sub.grade]||"#6B7280"}}>{sub.grade}</td><td className="px-3 py-2 text-center">—</td></tr>
+              ))}</tbody></table>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -639,8 +787,34 @@ function PodiumCard({ student, position, height, bgClass }: { student: StudentRe
   );
 }
 
-function OverallLeaderboardTable({ students, type, maxTotal }: { students: StudentResult[]; type: LeaderboardType; maxTotal: number }) {
+function OverallLeaderboardTable({ students, type, maxTotal, onStudentClick }: { students: StudentResult[]; type: LeaderboardType; maxTotal: number; onStudentClick?: (s: StudentResult) => void }) {
   const { t } = useI18n();
+
+  // Assign dense serial ranks: same score = same rank, next rank = prev rank + 1
+  const serialRanks = new Map<number, number>();
+  let cur = 1;
+  students.forEach((s, i) => {
+    if (i > 0) {
+      const prev = students[i-1];
+      if (type === "overall") {
+        if (prev.gpa !== s.gpa) cur++;
+        else if (prev.gpa === s.gpa && s.totalObtained < prev.totalObtained) cur++;
+      } else if (type === "cq") {
+        if (prev.totalCq !== s.totalCq) cur++;
+      } else if (type === "mcq") {
+        if (prev.totalMcq !== s.totalMcq) cur++;
+      }
+    }
+    serialRanks.set(s.studentId, cur);
+  });
+
+  const rankArrow = (displayRank: number, roll: number) => {
+    const rollPos = Math.ceil(roll / 2);
+    if (displayRank < rollPos) return <span className="text-emerald font-bold" title="Performing better than roll position">↑</span>;
+    if (displayRank > rollPos) return <span className="text-crimson font-bold" title="Performing below roll position">↓</span>;
+    return <span className="text-muted" title="Matching roll position">—</span>;
+  };
+
   return (
     <table className="w-full text-xs md:text-sm">
       <thead>
@@ -648,24 +822,39 @@ function OverallLeaderboardTable({ students, type, maxTotal }: { students: Stude
           <th className="text-left text-[10px] md:text-xs font-semibold text-muted uppercase tracking-wider py-2 md:py-3 px-2 md:px-3">{t("common.rank")}</th>
           <th className="text-left text-[10px] md:text-xs font-semibold text-muted uppercase tracking-wider py-2 md:py-3 px-2 md:px-3">{t("common.student")}</th>
           <th className="text-left text-[10px] md:text-xs font-semibold text-muted uppercase tracking-wider py-2 md:py-3 px-2 md:px-3 hidden md:table-cell">{t("common.roll")}</th>
+          <th className="text-center text-[10px] md:text-xs font-semibold text-muted uppercase tracking-wider py-2 md:py-3 px-2 md:px-3">GPA</th>
           <th className="text-right text-[10px] md:text-xs font-semibold text-muted uppercase tracking-wider py-2 md:py-3 px-2 md:px-3">{type === "cq" ? t("common.cq_total") : type === "mcq" ? t("common.mcq_total") : t("common.total")}</th>
-          <th className="text-right text-[10px] md:text-xs font-semibold text-muted uppercase tracking-wider py-2 md:py-3 px-2 md:px-3 hidden sm:table-cell">{t("common.average")}</th>
           <th className="text-center text-[10px] md:text-xs font-semibold text-muted uppercase tracking-wider py-2 md:py-3 px-2 md:px-3">{t("common.grade")}</th>
         </tr>
       </thead>
       <tbody>
         {students.map((s, i) => {
           const getVal = () => { if (type === "cq") return s.totalCq; if (type === "mcq") return s.totalMcq; return s.totalObtained; };
-          const getRank = () => { if (type === "cq") return s.cqRank; if (type === "mcq") return s.mcqRank; return s.rank; };
+          const displayRank = serialRanks.get(s.studentId) || i + 1;
+          const isTop3 = displayRank <= 3;
           return (
-            <tr key={s.studentId} className={`border-b border-white/20 hover:bg-white/30 transition-colors ${i < 3 ? "font-medium" : ""}`}>
-              <td className="py-2 md:py-3 px-2 md:px-3"><span className={`inline-flex items-center justify-center w-6 h-6 md:w-8 md:h-8 rounded-lg md:rounded-xl text-[11px] md:text-sm font-bold ${getRank() === 1 ? "bg-amber/15 text-amber" : getRank() === 2 ? "bg-gray-500/10 text-gray-500" : getRank() === 3 ? "bg-orange-500/15 text-orange-600" : "text-muted"}`}>{getRank() || "-"}</span></td>
-              <td className="py-2 md:py-3 px-2 md:px-3"><div className="flex items-center gap-2"><div className="hidden sm:flex w-6 h-6 md:w-8 md:h-8 rounded-full gradient-royal items-center justify-center text-white text-[10px] md:text-xs font-bold ring-1 md:ring-2 ring-white/50 flex-shrink-0">{s.name.charAt(0)}</div><span className="text-xs md:text-sm font-medium text-charcoal truncate max-w-[90px] sm:max-w-none">{s.name}</span></div></td>
+            <motion.tr key={s.studentId}
+              onClick={() => onStudentClick?.(s)}
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.3, delay: i * 0.04 }}
+              className={`cursor-pointer border-b border-white/20 hover:bg-white/30 transition-colors ${i < 3 ? "font-medium" : ""}`}>
+              <td className="py-2 md:py-3 px-2 md:px-3">
+                <div className="flex items-center gap-1">
+                  <span className={`inline-flex items-center justify-center w-6 h-6 md:w-8 md:h-8 rounded-lg md:rounded-xl text-[11px] md:text-sm font-bold ${displayRank === 1 ? "bg-amber/15 text-amber" : displayRank === 2 ? "bg-gray-500/10 text-gray-500" : displayRank === 3 ? "bg-orange-500/15 text-orange-600" : "text-muted"}`}>
+                    {isTop3 ? ["🥇","🥈","🥉"][displayRank-1] : `#${displayRank}`}
+                  </span>
+                  {type === "overall" && rankArrow(displayRank, s.rollNumber)}
+                </div>
+              </td>
+              <td className="py-2 md:py-3 px-2 md:px-3"><div className="flex items-center gap-2"><div className="hidden sm:flex w-6 h-6 md:w-8 md:h-8 rounded-full gradient-royal items-center justify-center text-white text-[10px] md:text-xs font-bold ring-1 md:ring-2 ring-white/50 flex-shrink-0">{s.name.charAt(0)}</div><span className="text-xs md:text-sm font-medium text-charcoal truncate max-w-[90px] sm:max-w-none hover:underline">{s.name}</span></div></td>
               <td className="py-2 md:py-3 px-2 md:px-3 text-[11px] md:text-sm text-muted hidden md:table-cell">{s.rollNumber}</td>
+              <td className="py-2 md:py-3 px-2 md:px-3 text-center">
+                <span className={`text-xs md:text-sm font-bold ${s.gpa >= 5 ? "text-emerald" : s.gpa >= 4 ? "text-royal" : s.gpa >= 3 ? "text-amber" : s.gpa >= 2 ? "text-orange-500" : s.gpa > 0 ? "text-crimson" : "text-gray-400"}`}>{s.gpa.toFixed(2)}</span>
+              </td>
               <td className="py-2 md:py-3 px-2 md:px-3 text-right text-xs md:text-sm font-semibold text-charcoal">{getVal()}<span className="text-muted font-normal hidden sm:inline">/{maxTotal}</span></td>
-              <td className="py-2 md:py-3 px-2 md:px-3 text-right text-[11px] md:text-sm text-muted hidden sm:table-cell">{s.average}%</td>
               <td className="py-2 md:py-3 px-2 md:px-3 text-center"><span className="px-1.5 md:px-2.5 py-0.5 md:py-1 rounded-lg md:rounded-xl text-[10px] md:text-xs font-bold" style={{ backgroundColor: `${GRADE_COLORS[s.overallGrade] || "#6B7280"}18`, color: GRADE_COLORS[s.overallGrade] || "#6B7280" }}>{s.overallGrade}</span></td>
-            </tr>
+            </motion.tr>
           );
         })}
       </tbody>
@@ -673,7 +862,70 @@ function OverallLeaderboardTable({ students, type, maxTotal }: { students: Stude
   );
 }
 
-function SubjectLeaderboardTable({ students, subject }: { students: StudentResult[]; subject: string }) {
+function AttendanceLeaderboardTable({ students }: { students: AttendanceLeaderboardEntry[] }) {
+  const { t } = useI18n();
+
+  // Dense serial rank: ties on percentage (then streak) share a rank.
+  const ranks = new Map<number, number>();
+  let cur = 1;
+  students.forEach((s, i) => {
+    if (i > 0) {
+      const prev = students[i - 1];
+      if (prev.percentage !== s.percentage || prev.currentStreak !== s.currentStreak) cur++;
+    }
+    ranks.set(s.studentId, cur);
+  });
+
+  return (
+    <table className="w-full text-xs md:text-sm">
+      <thead>
+        <tr className="border-b border-white/30">
+          <th className="text-left text-[10px] md:text-xs font-semibold text-muted uppercase tracking-wider py-2 md:py-3 px-2 md:px-3">{t("common.rank")}</th>
+          <th className="text-left text-[10px] md:text-xs font-semibold text-muted uppercase tracking-wider py-2 md:py-3 px-2 md:px-3">{t("common.student")}</th>
+          <th className="text-left text-[10px] md:text-xs font-semibold text-muted uppercase tracking-wider py-2 md:py-3 px-2 md:px-3 hidden md:table-cell">{t("common.roll")}</th>
+          <th className="text-center text-[10px] md:text-xs font-semibold text-muted uppercase tracking-wider py-2 md:py-3 px-2 md:px-3">🔥 Streak</th>
+          <th className="text-right text-[10px] md:text-xs font-semibold text-muted uppercase tracking-wider py-2 md:py-3 px-2 md:px-3">Present</th>
+          <th className="text-right text-[10px] md:text-xs font-semibold text-muted uppercase tracking-wider py-2 md:py-3 px-2 md:px-3">Rate</th>
+        </tr>
+      </thead>
+      <tbody>
+        {students.map((s, i) => {
+          const displayRank = ranks.get(s.studentId) || i + 1;
+          const isTop3 = displayRank <= 3;
+          return (
+            <motion.tr key={s.studentId}
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.3, delay: i * 0.04 }}
+              className={`border-b border-white/20 hover:bg-white/30 transition-colors ${i < 3 ? "font-medium" : ""}`}>
+              <td className="py-2 md:py-3 px-2 md:px-3">
+                <span className={`inline-flex items-center justify-center w-6 h-6 md:w-8 md:h-8 rounded-lg md:rounded-xl text-[11px] md:text-sm font-bold ${displayRank === 1 ? "bg-amber/15 text-amber" : displayRank === 2 ? "bg-gray-500/10 text-gray-500" : displayRank === 3 ? "bg-orange-500/15 text-orange-600" : "text-muted"}`}>
+                  {isTop3 ? ["🥇", "🥈", "🥉"][displayRank - 1] : `#${displayRank}`}
+                </span>
+              </td>
+              <td className="py-2 md:py-3 px-2 md:px-3">
+                <div className="flex items-center gap-2">
+                  <div className="hidden sm:flex w-6 h-6 md:w-8 md:h-8 rounded-full gradient-royal items-center justify-center text-white text-[10px] md:text-xs font-bold ring-1 md:ring-2 ring-white/50 flex-shrink-0">
+                    {s.name.charAt(0)}
+                  </div>
+                  <span className="text-xs md:text-sm font-medium text-charcoal truncate max-w-[90px] sm:max-w-none">{s.name}</span>
+                </div>
+              </td>
+              <td className="py-2 md:py-3 px-2 md:px-3 text-[11px] md:text-sm text-muted hidden md:table-cell">{s.rollNumber}</td>
+              <td className="py-2 md:py-3 px-2 md:px-3 text-center text-xs md:text-sm font-bold text-charcoal">{s.currentStreak}</td>
+              <td className="py-2 md:py-3 px-2 md:px-3 text-right text-xs md:text-sm font-semibold text-charcoal">{s.presentDays}<span className="text-muted font-normal">/{s.totalDays}</span></td>
+              <td className="py-2 md:py-3 px-2 md:px-3 text-right">
+                <span className={`text-xs md:text-sm font-bold ${s.percentage >= 90 ? "text-emerald" : s.percentage >= 75 ? "text-royal" : s.percentage >= 50 ? "text-amber" : "text-crimson"}`}>{s.percentage}%</span>
+              </td>
+            </motion.tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+}
+
+function SubjectLeaderboardTable({ students, subject, onStudentClick }: { students: StudentResult[]; subject: string; onStudentClick?: (s: StudentResult) => void }) {
   const { t } = useI18n();
   return (
     <table className="w-full text-xs md:text-sm">
@@ -691,14 +943,19 @@ function SubjectLeaderboardTable({ students, subject }: { students: StudentResul
         {students.map((s) => {
           const mark = s.subjects.find((x) => x.subject === subject);
           return (
-            <tr key={s.studentId} className="border-b border-white/20 hover:bg-white/30 transition-colors">
+            <motion.tr key={s.studentId}
+              onClick={() => onStudentClick?.(s)}
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.3, delay: students.indexOf(s) * 0.04 }}
+              className="cursor-pointer border-b border-white/20 hover:bg-white/30 transition-colors">
               <td className="py-2 md:py-3 px-2 md:px-3 text-xs font-bold text-charcoal">{s.subjectRanks[subject] ?? "-"}</td>
-              <td className="py-2 md:py-3 px-2 md:px-3"><div className="flex items-center gap-2"><div className="hidden sm:flex w-6 h-6 md:w-8 md:h-8 rounded-full gradient-royal items-center justify-center text-white text-[10px] md:text-xs font-bold flex-shrink-0">{s.name.charAt(0)}</div><span className="text-xs md:text-sm font-medium truncate max-w-[80px] sm:max-w-none">{s.name}</span></div></td>
+              <td className="py-2 md:py-3 px-2 md:px-3"><div className="flex items-center gap-2"><div className="hidden sm:flex w-6 h-6 md:w-8 md:h-8 rounded-full gradient-royal items-center justify-center text-white text-[10px] md:text-xs font-bold flex-shrink-0">{s.name.charAt(0)}</div><span className="text-xs md:text-sm font-medium truncate max-w-[80px] sm:max-w-none hover:underline">{s.name}</span></div></td>
               <td className="py-2 md:py-3 px-2 text-right text-[11px] md:text-sm text-muted">{mark?.cq ?? 0}</td>
               <td className="py-2 md:py-3 px-2 text-right text-[11px] md:text-sm text-muted">{mark?.mcq ?? 0}</td>
               <td className="py-2 md:py-3 px-2 md:px-3 text-right text-xs font-semibold">{mark?.total ?? 0}</td>
               <td className="py-2 md:py-3 px-2 md:px-3 text-center"><span className="px-1.5 md:px-2.5 py-0.5 md:py-1 rounded-lg text-[10px] md:text-xs font-bold" style={{ backgroundColor: `${GRADE_COLORS[mark?.grade || "F"] || "#6B7280"}18`, color: GRADE_COLORS[mark?.grade || "F"] || "#6B7280" }}>{mark?.grade || "N/A"}</span></td>
-            </tr>
+            </motion.tr>
           );
         })}
       </tbody>

@@ -2,21 +2,28 @@
 
 @theme {
   --font-bangla: 'Anek Bangla', 'Noto Sans Bengali', sans-serif;
-  --color-royal: #006FEE;
-  --color-royal-dark: #0055CC;
-  --color-royal-light: #E8F0FE;
+  /* Ink — replaces the old blue "royal" as the primary brand color everywhere
+     (buttons, links, active states, avatars). Editorial black instead of SaaS-blue. */
+  --color-royal: #14140F;
+  --color-royal-dark: #000000;
+  --color-royal-light: #F0F0E9;
   --color-emerald: #059669;
   --color-emerald-light: #D1FAE5;
   --color-crimson: #DC2626;
   --color-crimson-light: #FEE2E2;
   --color-amber: #F59E0B;
   --color-amber-light: #FEF3C7;
-  --color-charcoal: #1A1A2E;
-  --color-muted: #6B7280;
+  /* Accent — the single "pop" color, used sparingly for highlights, active dots, progress fills */
+  --color-accent: #D7FF3E;
+  --color-accent-ink: #1B2000;
+  --color-charcoal: #16160F;
+  --color-muted: #737368;
   --color-surface: #FFFFFF;
-  --color-bg: #F0F2F5;
-  --color-border: #E5E7EB;
-  --color-sidebar: #FAFBFC;
+  /* Soft sage-porcelain backdrop instead of cool gray */
+  --color-bg: #ECEFE3;
+  --color-border: #E2E4D6;
+  /* Sidebar is now a literal black rail, not a light glass panel */
+  --color-sidebar: #111309;
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
@@ -46,91 +53,57 @@
   img { max-width: 100%; height: auto; }
 
   ::selection {
-    background: var(--color-royal);
-    color: white;
+    background: var(--color-accent);
+    color: var(--color-accent-ink);
   }
 }
 
 @layer utilities {
-  /* ===== LIQUID GLASS SYSTEM ===== */
+  /* ===== CLEAN CARD SYSTEM ===== */
+  /* Replaces the old frosted-glass look with flat, editorial cards on a soft
+     sage backdrop — matte white, thin warm-gray border, soft lifted shadow.
+     Class names kept identical so every existing page reskins automatically. */
   .liquid-glass {
-    background: linear-gradient(
-      135deg,
-      rgba(255, 255, 255, 0.55) 0%,
-      rgba(255, 255, 255, 0.25) 50%,
-      rgba(255, 255, 255, 0.4) 100%
-    );
-    backdrop-filter: blur(40px) saturate(200%);
-    -webkit-backdrop-filter: blur(40px) saturate(200%);
-    border: 1px solid rgba(255, 255, 255, 0.65);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
     box-shadow:
-      0 8px 32px rgba(0, 0, 0, 0.06),
-      0 2px 8px rgba(0, 0, 0, 0.04),
-      inset 0 1px 0 rgba(255, 255, 255, 0.9),
-      inset 0 -1px 0 rgba(255, 255, 255, 0.3);
+      0 1px 2px rgba(20, 20, 15, 0.03),
+      0 10px 28px -12px rgba(20, 20, 15, 0.10);
   }
 
   .liquid-glass-sm {
-    background: linear-gradient(
-      135deg,
-      rgba(255, 255, 255, 0.6) 0%,
-      rgba(255, 255, 255, 0.3) 100%
-    );
-    backdrop-filter: blur(24px) saturate(180%);
-    -webkit-backdrop-filter: blur(24px) saturate(180%);
-    border: 1px solid rgba(255, 255, 255, 0.5);
-    box-shadow:
-      0 4px 16px rgba(0, 0, 0, 0.05),
-      inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    background: #F6F7EF;
+    border: 1px solid var(--color-border);
+    box-shadow: 0 1px 2px rgba(20, 20, 15, 0.04);
   }
 
   .liquid-glass-strong {
-    background: linear-gradient(
-      135deg,
-      rgba(255, 255, 255, 0.7) 0%,
-      rgba(255, 255, 255, 0.35) 40%,
-      rgba(255, 255, 255, 0.5) 100%
-    );
-    backdrop-filter: blur(60px) saturate(220%);
-    -webkit-backdrop-filter: blur(60px) saturate(220%);
-    border: 1px solid rgba(255, 255, 255, 0.7);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
     box-shadow:
-      0 12px 40px rgba(0, 0, 0, 0.08),
-      0 4px 12px rgba(0, 0, 0, 0.04),
-      inset 0 2px 0 rgba(255, 255, 255, 1),
-      inset 0 -1px 0 rgba(255, 255, 255, 0.4);
+      0 2px 4px rgba(20, 20, 15, 0.03),
+      0 20px 48px -16px rgba(20, 20, 15, 0.14);
   }
 
+  /* Literal black card — used for the homepage header band, CTA panels,
+     and the admin sidebar rail. This is the "ink" surface from the reference. */
   .liquid-glass-dark {
-    background: linear-gradient(
-      135deg,
-      rgba(26, 26, 46, 0.6) 0%,
-      rgba(15, 52, 96, 0.4) 100%
-    );
-    backdrop-filter: blur(40px) saturate(200%);
-    -webkit-backdrop-filter: blur(40px) saturate(200%);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    box-shadow:
-      0 8px 32px rgba(0, 0, 0, 0.2),
-      inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    background: var(--color-sidebar);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #F4F5EC;
+    box-shadow: 0 20px 48px -16px rgba(0, 0, 0, 0.5);
   }
 
   .liquid-glass-hover {
-    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .liquid-glass-hover:hover {
-    background: linear-gradient(
-      135deg,
-      rgba(255, 255, 255, 0.65) 0%,
-      rgba(255, 255, 255, 0.35) 50%,
-      rgba(255, 255, 255, 0.5) 100%
-    );
+    background: #FCFDF7;
+    border-color: rgba(20, 20, 15, 0.16);
     box-shadow:
-      0 20px 60px rgba(0, 0, 0, 0.1),
-      0 4px 12px rgba(0, 0, 0, 0.06),
-      inset 0 2px 0 rgba(255, 255, 255, 1),
-      inset 0 -1px 0 rgba(255, 255, 255, 0.5);
+      0 24px 56px -20px rgba(20, 20, 15, 0.22),
+      0 4px 12px rgba(20, 20, 15, 0.06);
     transform: translateY(-2px);
   }
 
@@ -173,24 +146,35 @@
   }
 
   .gradient-royal {
-    background: linear-gradient(135deg, #006FEE 0%, #0055CC 100%);
+    background: linear-gradient(135deg, #26271C 0%, #0A0A06 100%);
   }
 
   .gradient-hero {
     background: linear-gradient(
       135deg,
-      #1a1a2e 0%,
-      #16213e 30%,
-      #0f3460 60%,
-      #006FEE 100%
+      #14150D 0%,
+      #1B1C12 40%,
+      #22240F 70%,
+      #2B2E0C 100%
     );
   }
 
   .text-gradient {
-    background: linear-gradient(135deg, #006FEE, #0055CC);
+    background: linear-gradient(135deg, #14140F, #000000);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
+  }
+
+  /* The lime "pop" — active nav dots, highlighted stat chips, streak badges */
+  .accent-chip {
+    background: var(--color-accent);
+    color: var(--color-accent-ink);
+  }
+
+  .accent-dot {
+    background: var(--color-accent);
+    box-shadow: 0 0 0 4px rgba(215, 255, 62, 0.25);
   }
 
   /* ===== ANIMATIONS ===== */
@@ -331,5 +315,5 @@
 input:focus, select:focus, textarea:focus {
   outline: none;
   border-color: var(--color-royal) !important;
-  box-shadow: 0 0 0 3px rgba(0, 111, 238, 0.15);
+  box-shadow: 0 0 0 3px rgba(20, 20, 15, 0.12);
 }
