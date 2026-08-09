@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
+import Link from "next/link";
 
 export interface RankListStudent {
   studentId: number;
@@ -9,6 +10,7 @@ export interface RankListStudent {
   rollNumber: number;
   profilePicture?: string;
   totalObtained?: number;
+  maxPossibleTotal?: number;
   gpa?: number;
   rank?: number | null;
   level?: number;
@@ -24,6 +26,10 @@ interface LeaderboardRankListProps {
   onSelectStudent?: (student: any) => void;
   title?: string;
   searchPlaceholder?: string;
+  /** Max number of students to display. 0 or undefined = show all */
+  limit?: number;
+  /** If set, renders a "Show More" button that links to this href */
+  showMoreHref?: string;
 }
 
 export default function LeaderboardRankList({
@@ -31,7 +37,9 @@ export default function LeaderboardRankList({
   activeStudentId,
   onSelectStudent,
   title = "Rankings",
-  searchPlaceholder = "Search student..."
+  searchPlaceholder = "Search student...",
+  limit,
+  showMoreHref,
 }: LeaderboardRankListProps) {
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -42,6 +50,13 @@ export default function LeaderboardRankList({
           s.rollNumber.toString().includes(searchQuery)
       )
     : students;
+
+  // Apply limit only when there's no active search
+  const displayList = limit && limit > 0 && !searchQuery.trim()
+    ? filtered.slice(0, limit)
+    : filtered;
+
+  const hasMore = limit && limit > 0 && !searchQuery.trim() && filtered.length > limit;
 
   // Deterministic generator for trends if not provided
   const getTrend = (s: RankListStudent, idx: number) => {
@@ -95,11 +110,12 @@ export default function LeaderboardRankList({
 
       {/* Student List */}
       <div className="divide-y divide-slate-100/70 p-2 sm:p-3 space-y-1.5">
-        {filtered.map((s, idx) => {
+        {displayList.map((s, idx) => {
           const rankNum = s.rank || idx + 1;
           const isActive = activeStudentId ? s.studentId === activeStudentId : rankNum === 1;
           const trend = getTrend(s, idx);
-          const levelVal = s.level ?? 3;
+          const totalMarks = s.totalObtained ?? 0;
+          const gpaVal = s.gpa ?? 0;
 
           return (
             <motion.div
@@ -132,13 +148,13 @@ export default function LeaderboardRankList({
                   )}
                 </div>
 
-                {/* Name & Subtitle */}
+                {/* Name & Roll + (Total | GPA) */}
                 <div className="min-w-0">
                   <h4 className="text-xs sm:text-sm font-bold text-slate-800 truncate group-hover:text-indigo-600 transition-colors">
                     {s.name}
                   </h4>
                   <p className="text-[10px] sm:text-xs text-slate-400 font-medium">
-                    Level {levelVal}
+                    Roll {s.rollNumber} <span className="text-slate-300 mx-0.5">·</span> <span className="text-slate-500">(Total: {totalMarks} | GPA: {gpaVal.toFixed(2)})</span>
                   </p>
                 </div>
               </div>
@@ -171,6 +187,22 @@ export default function LeaderboardRankList({
           <div className="py-12 text-center text-slate-400 text-sm">No matching students found</div>
         )}
       </div>
+
+      {/* Show More Button */}
+      {hasMore && showMoreHref && (
+        <div className="px-6 py-4 border-t border-white/30 flex justify-center bg-white/20 backdrop-blur-sm">
+          <Link
+            href={showMoreHref}
+            className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-sm font-bold shadow-lg hover:shadow-xl hover:scale-[1.02] transition-all"
+          >
+            <span>Show More</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="5" y1="12" x2="19" y2="12" />
+              <polyline points="12 5 19 12 12 19" />
+            </svg>
+          </Link>
+        </div>
+      )}
     </div>
   );
 }

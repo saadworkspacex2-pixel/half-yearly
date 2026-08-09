@@ -323,6 +323,8 @@ export default function PublicDashboard() {
               onSelectStudent={setDetailStudent}
               title={t("dash.leaderboard")}
               searchPlaceholder={t("dash.search")}
+              limit={10}
+              showMoreHref="/leaderboard"
             />
           </div>
 
