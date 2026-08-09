@@ -7,7 +7,6 @@ import {
   timestamp,
   boolean,
   jsonb,
-  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 export const settings = pgTable("settings", {
@@ -176,24 +175,6 @@ export const homework = pgTable("homework", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
-
-// One row per student per school day. "status" is either "present" or "absent" —
-// weekends (Fri/Sat) are never written here, they're derived at read-time instead.
-export const attendance = pgTable(
-  "attendance",
-  {
-    id: serial("id").primaryKey(),
-    studentId: integer("student_id").notNull(),
-    rollNumber: integer("roll_number").notNull(),
-    date: text("date").notNull(), // "YYYY-MM-DD", Asia/Dhaka calendar date
-    status: text("status").notNull(), // present | absent
-    markedBy: text("marked_by").default("admin"),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-  },
-  (table) => [
-    uniqueIndex("attendance_date_roll_idx").on(table.date, table.rollNumber),
-  ]
-);
 
 export const auditLogs = pgTable("audit_logs", {
   id: serial("id").primaryKey(),

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
+import LiquidGlassBackground from "@/components/LiquidGlassBackground";
 
 export const metadata: Metadata = {
   title: "Class 8 Result",
@@ -12,16 +13,17 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en">
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&family=Anek+Bangla:wght@300;400;500;600;700;800&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Anek+Bangla:wght@300;400;500;600;700;800&display=swap"
           rel="stylesheet"
         />
       </head>
-      <body className="bg-[#000000] text-[#F5F5F7] font-sans antialiased selection:bg-[#0071E3] selection:text-white">{children}</body>
+      <body className="bg-slate-950 text-charcoal antialiased relative min-h-screen">
+        <LiquidGlassBackground />
+        {children}
+      </body>
     </html>
   );
 }

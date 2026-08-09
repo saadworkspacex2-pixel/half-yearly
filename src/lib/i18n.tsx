@@ -30,9 +30,6 @@ const translations: Record<string, Record<Lang, string>> = {
   "dash.leaderboard": { en: "Leaderboard", bn: "লিডারবোর্ড" },
   "dash.rankings": { en: "Real-time rankings", bn: "রিয়েল-টাইম র‍্যাংকিং" },
   "dash.top_performers": { en: "Top Performers", bn: "সেরা শিক্ষার্থী" },
-  "dash.attendance_leaderboard": { en: "Attendance Leaderboard", bn: "উপস্থিতি লিডারবোর্ড" },
-  "dash.attendance_rankings": { en: "Ranked by consistency", bn: "নিয়মিততা অনুযায়ী র‍্যাংকিং" },
-  "dash.no_attendance_data": { en: "No attendance has been recorded yet", bn: "এখনো কোনো উপস্থিতি রেকর্ড করা হয়নি" },
 
   // Stats
   "dash.students": { en: "Total Students", bn: "মোট শিক্ষার্থী" },
@@ -158,13 +155,6 @@ const translations: Record<string, Record<Lang, string>> = {
   "portal.logout": { en: "Logout", bn: "লগআউট" },
   "portal.overall_behavior": { en: "Overall Behavior", bn: "সামগ্রিক আচরণ" },
   "portal.no_comments": { en: "No comments yet", bn: "এখনো কোনো মন্তব্য নেই" },
-  "portal.attendance": { en: "Attendance", bn: "উপস্থিতি" },
-  "portal.attendance_desc": { en: "Your daily attendance record", bn: "আপনার দৈনিক উপস্থিতির তথ্য" },
-  "portal.attendance_pct": { en: "Attendance Rate", bn: "উপস্থিতির হার" },
-  "portal.current_streak": { en: "Current Streak", bn: "চলমান ধারা" },
-  "portal.longest_streak": { en: "Longest Streak", bn: "দীর্ঘতম ধারা" },
-  "portal.days_present": { en: "Days Present", bn: "উপস্থিত দিন" },
-  "portal.no_attendance": { en: "No attendance recorded yet", bn: "এখনো কোনো উপস্থিতি রেকর্ড করা হয়নি" },
 
   // Footer
   "footer.rights": { en: "All rights reserved.", bn: "সর্বস্বত্ব সংরক্ষিত।" },

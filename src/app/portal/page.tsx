@@ -14,17 +14,11 @@ interface StudentProfile {
   stats: { totalObtained: number; maxTotal: number; average: number; grade: string; tier: "S" | "A" | "B" | "C" | "D" };
 }
 
-interface AttendanceData {
-  history: Array<{ date: string; status: string }>;
-  stats: { totalDays: number; presentDays: number; absentDays: number; percentage: number; currentStreak: number; longestStreak: number };
-}
-
 function StudentPortalContent() {
   const { t, lang, toggleLang } = useI18n();
   const [loggedIn, setLoggedIn] = useState(false);
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<StudentProfile | null>(null);
-  const [attendance, setAttendance] = useState<AttendanceData | null>(null);
   const [roll, setRoll] = useState("");
   const [password, setPassword] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
@@ -43,17 +37,11 @@ function StudentPortalContent() {
 
   const fetchProfile = async () => {
     try {
-      const [profileRes, attendanceRes] = await Promise.all([
-        fetch("/api/student/profile"),
-        fetch("/api/student/attendance"),
-      ]);
-      if (profileRes.ok) {
-        const data = await profileRes.json();
+      const res = await fetch("/api/student/profile");
+      if (res.ok) {
+        const data = await res.json();
         setProfile(data);
         setLoggedIn(true);
-      }
-      if (attendanceRes.ok) {
-        setAttendance(await attendanceRes.json());
       }
     } catch {}
     setLoading(false);
@@ -263,58 +251,6 @@ function StudentPortalContent() {
             </div>
           </div>
         </div>
-
-        {/* Attendance */}
-        {attendance && (
-          <div className="liquid-glass-strong rounded-3xl p-6">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 rounded-xl bg-emerald/10 flex items-center justify-center text-emerald">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-charcoal">{t("portal.attendance")}</h3>
-                <p className="text-xs text-muted">{t("portal.attendance_desc")}</p>
-              </div>
-            </div>
-
-            {attendance.stats.totalDays === 0 ? (
-              <div className="text-center py-10">
-                <p className="text-sm text-muted">{t("portal.no_attendance")}</p>
-              </div>
-            ) : (
-              <>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-                  <div className="liquid-glass-sm rounded-2xl p-4 text-center">
-                    <p className="text-2xl md:text-3xl font-black text-charcoal">{attendance.stats.percentage}%</p>
-                    <p className="text-[11px] text-muted mt-1">{t("portal.attendance_pct")}</p>
-                  </div>
-                  <div className="liquid-glass-sm rounded-2xl p-4 text-center">
-                    <p className="text-2xl md:text-3xl font-black text-emerald">🔥 {attendance.stats.currentStreak}</p>
-                    <p className="text-[11px] text-muted mt-1">{t("portal.current_streak")}</p>
-                  </div>
-                  <div className="liquid-glass-sm rounded-2xl p-4 text-center">
-                    <p className="text-2xl md:text-3xl font-black text-amber">{attendance.stats.longestStreak}</p>
-                    <p className="text-[11px] text-muted mt-1">{t("portal.longest_streak")}</p>
-                  </div>
-                  <div className="liquid-glass-sm rounded-2xl p-4 text-center">
-                    <p className="text-2xl md:text-3xl font-black text-charcoal">{attendance.stats.presentDays}<span className="text-muted text-base">/{attendance.stats.totalDays}</span></p>
-                    <p className="text-[11px] text-muted mt-1">{t("portal.days_present")}</p>
-                  </div>
-                </div>
-
-                {/* Recent day chips */}
-                <div className="flex gap-1.5 flex-wrap">
-                  {attendance.history.slice(0, 30).reverse().map((h) => (
-                    <div key={h.date} title={h.date}
-                      className={`w-6 h-6 md:w-7 md:h-7 rounded-lg flex items-center justify-center text-[9px] font-bold ${h.status === "present" ? "bg-emerald/15 text-emerald" : "bg-crimson/15 text-crimson"}`}>
-                      {h.status === "present" ? "✓" : "✕"}
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Behavioral Rating Bars */}
