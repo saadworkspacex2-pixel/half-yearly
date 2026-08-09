@@ -10,18 +10,19 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   try {
     const session = await getSession();
-    if (!session || session.role !== "student") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!session || session.role !== "student" || !session.studentId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-    const rows = await db
-      .select({ date: attendance.date, status: attendance.status })
+    const records = await db
+      .select()
       .from(attendance)
-      .where(eq(attendance.studentId, session.studentId!));
+      .where(eq(attendance.studentId, session.studentId));
 
-    const stats = computeAttendanceStats(rows);
-    const history = [...rows].sort((a, b) => b.date.localeCompare(a.date));
+    const stats = computeAttendanceStats(records);
 
-    return NextResponse.json({ history, stats });
-  } catch (err: unknown) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "Failed" }, { status: 500 });
+    return NextResponse.json({ records, stats });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message || "Failed to fetch student attendance" }, { status: 500 });
   }
 }
